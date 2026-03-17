@@ -21,4 +21,4 @@ class PreFlow(BaseModel):
     steps_md: str = Field(...,
                           description="Markdown formatted business process, human-readable and for LLM generate PSOP")
 
-    tags: Optional[List[str]] = Field(None, description="Tags for quick filtering")
+    tags: Optional[List[str]] = Field(default_factory=list, description="Tags for quick filtering")
