@@ -1,5 +1,5 @@
 import {useInternalNode} from "@xyflow/react";
-import {getEdgeParams} from "@/components/orchestration_center/workflowEditor/CustomEdges/FloatingEdge/utils.js";
+import {getEdgeParams} from "./utils.js";
 import {BaseEdge, getStraightPath} from "reactflow";
 
 function FloatingEdge({id, source, target, markerEnd, style}) {
