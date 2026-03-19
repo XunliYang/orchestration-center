@@ -4,6 +4,7 @@ import tempfile
 from a2a.types import AgentCard
 from flask import Flask, request, jsonify
 from loguru import logger
+from flask_cors import CORS
 
 from framework.orchestration.model.preflow import PreFlow
 from framework.orchestration.model.psop import PSOP
@@ -15,6 +16,7 @@ from framework.solution_package.parse_flow import SolutionPackageParser
 from framework.agentcard_lib import AgentCardLib
 
 app = Flask(__name__)
+CORS(app)
 
 storage = WorkflowStorage()
 retrieval = WorkflowRetrieval(storage)
