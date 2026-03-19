@@ -39,7 +39,6 @@ const SettingsModal = ({isOpen, onClose, t}) => {
                     </button>
                 </div>
 
-                {/*body*/}
                 <div className={"p-8 space-y-6"}>
                     <div className={"space-y-2"}>
                         <label className={"text-[10px] font-black text-zinc-400 ml-1"}>Backend Host(IP)</label>
@@ -68,7 +67,6 @@ const SettingsModal = ({isOpen, onClose, t}) => {
                     </p>
                 </div>
 
-                {/*Footer*/}
                 <div
                     className={"p-6 bg-zinc-50/50 dark:bg-zinc-900/50 border-t border-zinc-50 dark:border-zinc-800 flex gap-3"}>
                     <button onClick={onClose}

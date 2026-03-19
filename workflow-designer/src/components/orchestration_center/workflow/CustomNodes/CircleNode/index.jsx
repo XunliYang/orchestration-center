@@ -1,4 +1,4 @@
-import {Handle} from "@xyflow/react";
+import {Handle,Position} from "@xyflow/react";
 
 export const StartNode = ({data})=>{
     return (
