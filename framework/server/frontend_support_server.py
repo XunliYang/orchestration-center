@@ -1,0 +1,150 @@
+import os
+import tempfile
+
+from a2a.types import AgentCard
+from flask import Flask, request, jsonify
+from loguru import logger
+
+from framework.orchestration.model.preflow import PreFlow
+from framework.orchestration.model.psop import PSOP
+from framework.orchestration.psop_generator import PsopGenerator
+from framework.orchestration.persistence import WorkflowStorage
+from framework.orchestration.retrieval import WorkflowRetrieval
+from framework.parser.parse_flow import SolutionPackageParser
+
+app = Flask(__name__)
+
+storage = WorkflowStorage()
+retrieval = WorkflowRetrieval(storage)
+
+
+@app.route('/parse-pdf', methods=['POST'])
+def parse_pdf():
+    if 'file' not in request.files:
+        return jsonify({'error': '未提供文件'}), 400
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({"error": "文件名为空"}), 400
+    if not file.filename or not file.filename.lower().endswith('.pdf'):
+        return jsonify({"error": "仅支持 PDF 文件"}), 400
+    with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp:
+        file.save(tmp.name)
+        tmp_file_path = tmp.name
+
+    try:
+        parser = SolutionPackageParser()
+        pre_md = parser.parse_pdf_chapter(
+            tmp_file_path,
+            "5. Interation Flow"
+        )
+        if not pre_md:
+            return jsonify({"error": "PDF解析失败，未找到指定章节"}), 400
+        
+        preflow = PreFlow(
+            name=file.filename,
+            description=f"从PDF文件 {file.filename} 解析的工作流",
+            steps_md=pre_md
+        )
+        return {
+            "status": "success",
+            "message": "PDF文件解析成功",
+            "content": preflow.model_dump_json()
+        }, 200
+    except Exception as e:
+        return jsonify({"error": f"解析失败：{str(e)}"}), 500
+    finally:
+        if os.path.exists(tmp_file_path):
+            os.unlink(tmp_file_path)
+
+
+@app.route('/plan', methods=['POST'])
+def plan():
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "请求体为空"}), 400
+        preflow_dict = data.get("preflow")
+        agent_cards_list = data.get("agent_cards")
+
+        if not preflow_dict or not agent_cards_list:
+            return jsonify({
+                "error": "缺少必要字段: task 和 steps 必须提供"
+            }), 400
+        generator = PsopGenerator()
+        workflow = generator.generate_psop_workflow(PreFlow.model_validate(preflow_dict),
+                                                    [AgentCard.model_validate(card) for card in agent_cards_list])
+        return jsonify({
+            "status": "success",
+            "data": workflow.model_dump_json()
+        }), 200
+    except Exception as e:
+        return jsonify({"error": f"规划失败 : {str(e)}"}), 500
+
+
+@app.route('/psops', methods=['GET'])
+def get_all_psops():
+    try:
+        limit = request.args.get('limit', default=10, type=int)
+        workflow_type = request.args.get('workflow_type', default='psop', type=str)
+        
+        recent_workflows = retrieval.list_recent_workflows(limit=limit, workflow_type=workflow_type)
+        
+        return jsonify({
+            "status": "success",
+            "count": len(recent_workflows),
+            "data": [wf.to_dict() for wf in recent_workflows]
+        }), 200
+    except Exception as e:
+        return jsonify({"error": f"获取PSOP列表失败: {str(e)}"}), 500
+
+
+@app.route('/psops/<workflow_id>', methods=['GET'])
+def get_psop_by_id(workflow_id):
+    try:
+        psop = retrieval.get_psop_by_id(workflow_id)
+        if not psop:
+            return jsonify({"error": f"未找到ID为 {workflow_id} 的PSOP"}), 404
+        
+        return jsonify({
+            "status": "success",
+            "data": psop.model_dump()
+        }), 200
+    except Exception as e:
+        return jsonify({"error": f"获取PSOP详情失败: {str(e)}"}), 500
+
+
+@app.route('/psops', methods=['POST'])
+def save_psop():
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "请求体为空"}), 400
+        
+        psop = PSOP.model_validate(data)
+        saved_id = storage.save_psop(psop)
+        
+        return jsonify({
+            "status": "success",
+            "message": "PSOP保存成功",
+            "workflow_id": saved_id
+        }), 201
+    except Exception as e:
+        return jsonify({"error": f"保存PSOP失败: {str(e)}"}), 500
+
+
+if __name__ == '__main__':
+    logger.info("=" * 50)
+    logger.info("  PSOP 服务器接口")
+    logger.info("=" * 50)
+    logger.info("  POST /parse-pdf     -  上传 PDF 文件并解析")
+    logger.info("  POST /plan          -  提交任务和步骤，获取规划结果")
+    logger.info("")
+    logger.info("  PSOP 管理接口:")
+    logger.info("  GET  /psops         -  获取PSOP列表")
+    logger.info("  GET  /psops/<id>    -  根据ID获取PSOP详情")
+    logger.info("  POST /psops         -  保存PSOP")
+    logger.info("")
+    logger.info("  服务器启动在: http://localhost:6000")
+    logger.info("  详细文档请参考: PSOP_API_DOCUMENTATION.md")
+    logger.info("=" * 50)
+    app.run(host='localhost', port=6000, debug=True)
