@@ -1,4 +1,4 @@
-import { useTranslation } from 'react-i18next'; // 引入 i18n hook
+import { useTranslation } from 'react-i18next';
 import {
     Server,
     Globe,
@@ -14,7 +14,6 @@ import {
     Settings
 } from 'lucide-react';
 
-// --- 类型定义保持不变 ---
 interface AgentCapability {
     extensions: any;
     pushNotifications: boolean;
@@ -56,7 +55,6 @@ interface AgentProfileProps {
     isDark: boolean;
 }
 
-// --- 样式配置 ---
 const getTheme = (isDark: boolean) => ({
     bg: isDark ? 'bg-zinc-950' : 'bg-transparent',
     cardBg: isDark ? 'bg-zinc-900' : 'bg-white',
@@ -71,13 +69,11 @@ const getTheme = (isDark: boolean) => ({
     cardBorder: isDark ? 'border-zinc-700/50' : 'border-slate-200/60'
 });
 
-// --- 子组件：通用卡片容器 ---
 const InfoCard = ({title, icon: Icon, children, className = "", theme}: any) => (
     <div className={`p-5 rounded-xl border shadow-sm flex flex-col ${theme.cardBg} ${theme.border} ${className}`}>
         <div className="flex items-center gap-2 mb-4 pb-2 border-b border-dashed border-opacity-50"
              style={{borderColor: theme.border ? undefined : '#e5e7eb'}}>
             {Icon && <Icon className={`w-5 h-5 ${theme.accent}`}/>}
-            {/* 这里的 title 将直接传入翻译后的文本 */}
             <h3 className={`font-semibold text-xxxl ${theme.textPrimary}`}>{title}</h3>
         </div>
         <div className="flex-1">
@@ -86,7 +82,6 @@ const InfoCard = ({title, icon: Icon, children, className = "", theme}: any) => 
     </div>
 );
 
-// --- 子组件：状态行 ---
 const StatusRow = ({label, value, theme, mono = false}: any) => (
     <div className="flex justify-between items-center py-2 border-b last:border-0 border-dashed border-opacity-50"
          style={{borderColor: theme.border ? undefined : '#e5e7eb'}}>
@@ -118,13 +113,11 @@ const CapabilityToggle = ({ label, active, icon: Icon, theme }: any) => {
     );
 };
 
-// --- 主组件 ---
 const AgentDashboard: React.FC<AgentProfileProps> = ({agent, isDark}) => {
     console.log('AgentDashboard',agent)
     const {t} = useTranslation();
     const theme = getTheme(isDark);
 
-    // 解析描述文本逻辑
     const renderDescriptionList = (desc: string) => {
         return (
             <div className={`text-sm leading-relaxed whitespace-pre-wrap ${theme.textSecondary}`}>
@@ -147,7 +140,7 @@ const AgentDashboard: React.FC<AgentProfileProps> = ({agent, isDark}) => {
                         </ul>
                     </InfoCard>
                     <InfoCard
-                        title={`${t('agent_profile.skills')} (${agent.skills.length})`} // 使用 Key: skills
+                        title={`${t('agent_profile.skills')} (${agent.skills.length})`}
                         icon={Terminal}
                         theme={theme}
                     >
@@ -266,7 +259,6 @@ const AgentDashboard: React.FC<AgentProfileProps> = ({agent, isDark}) => {
                                 </div>
                             </div>
                         </div>
-                        {/* Documentation Link */}
                         {agent.documentationUrl && (
                             <a
                                 href={agent.documentationUrl}
