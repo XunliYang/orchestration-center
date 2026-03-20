@@ -1,7 +1,7 @@
 import {useTranslation} from "react-i18next";
 import {useEffect, useState} from "react";
 import {switchLanguage} from "@/service/api.js";
-import Header from "@/header/index.jsx";
+import Header from "@/components/common/header/index.jsx";
 import AgentRegistry from "./components/registry_center/index.jsx";
 import OrchestrationCenter from "@/components/orchestration_center/index.jsx";
 
@@ -14,7 +14,7 @@ const MainContainer = () => {
     });
 
     const [activeTab, setActiveTab] = useState(() => {
-        return localStorage.getItem('activeTab') || 'agents'
+        return localStorage.getItem('activeTab') || 'orchestration'
     });
 
     const handleLangChange = (l) => {
