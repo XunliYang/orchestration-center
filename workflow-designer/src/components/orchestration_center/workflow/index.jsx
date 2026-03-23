@@ -107,7 +107,7 @@ const FlowInner = ({
                 sourceOutgoingStats.set(edge.source, { hasExecutedChild: false });
             }
             const stats = sourceOutgoingStats.get(edge.source);
-            if (targetNode.status === 'executed' && targetNode.type !== 'endNode') {
+            if (['executed', 'success'].includes(targetNode.status) && targetNode.type !== 'endNode') {
                 stats.hasExecutedChild = true;
             }
         });
@@ -116,25 +116,30 @@ const FlowInner = ({
             const sourceNode = nodeMap.get(edge.source);
             const targetNode = nodeMap.get(edge.target);
             const sourceStats = sourceOutgoingStats.get(edge.source);
-            if (!sourceNode || !targetNode) return edge;
+            
+            if (!sourceNode || !targetNode) return {
+                ...edge,
+                style: { ...edge.style, stroke: themeClasses.inactiveEdgeColor, strokeWidth: themeClasses.inactiveStrokeWidth, opacity: 0.5 },
+                markerEnd: { type: MarkerType.ArrowClosed, color: themeClasses.inactiveEdgeColor }
+            };
 
-            const isSourcePassed = ['executed', 'current'].includes(sourceNode.status) || sourceNode.type === 'startNode';
-            const isTargetActive = ['executed', 'current'].includes(targetNode.status);
+            const isSourcePassed = ['executed', 'current', 'success', 'running'].includes(sourceNode.status) || sourceNode.type === 'startNode' || sourceNode.id === 'START_NODE';
+            const isTargetActive = ['executed', 'current', 'success', 'running', 'failed'].includes(targetNode.status);
             let isActive = isSourcePassed && isTargetActive;
 
-            if (isActive && (targetNode.type === 'endNode' || targetNode.status === 'current')) {
+            if (isActive && (targetNode.type === 'endNode' || targetNode.id === 'END_OF_WORKFLOW' || ['current', 'running'].includes(targetNode.status))) {
                 if (sourceStats && sourceStats.hasExecutedChild) isActive = false;
             }
 
             return {
                 ...edge,
-                label: null,
+                label: edge.label || null,
                 animated: isActive,
                 style: {
                     ...edge.style,
                     stroke: isActive ? themeClasses.activeEdgeColor : themeClasses.inactiveEdgeColor,
                     strokeWidth: isActive ? themeClasses.activeStrokeWidth : themeClasses.inactiveStrokeWidth,
-                    opacity: isActive ? 1 : 0.5,
+                    opacity: isActive ? 1 : 0.6,
                 },
                 markerEnd: {
                     type: MarkerType.ArrowClosed,
@@ -269,7 +274,7 @@ const FlowInner = ({
                 fitViewOptions={{ padding: 0.2 }}
                 proOptions={{ hideAttribution: true }}
                 defaultEdgeOptions={{
-                    type: mode === 'edit' ? 'smoothstep' : 'straight',
+                    type: 'smoothstep',
                     animated: false,
                 }}
             >
