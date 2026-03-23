@@ -60,6 +60,8 @@ const FlowInner = ({
                        // Edit 模式 Props
                        importedNodes,
                        importedEdges,
+                       workflowId,
+                       workflowName,
                        onCancel,
                        onSaveSuccess
                    }) => {
@@ -107,7 +109,7 @@ const FlowInner = ({
                 sourceOutgoingStats.set(edge.source, { hasExecutedChild: false });
             }
             const stats = sourceOutgoingStats.get(edge.source);
-            if (targetNode.status === 'executed' && targetNode.type !== 'endNode') {
+            if (['executed', 'success'].includes(targetNode.status) && targetNode.type !== 'endNode') {
                 stats.hasExecutedChild = true;
             }
         });
@@ -116,25 +118,30 @@ const FlowInner = ({
             const sourceNode = nodeMap.get(edge.source);
             const targetNode = nodeMap.get(edge.target);
             const sourceStats = sourceOutgoingStats.get(edge.source);
-            if (!sourceNode || !targetNode) return edge;
+            
+            if (!sourceNode || !targetNode) return {
+                ...edge,
+                style: { ...edge.style, stroke: themeClasses.inactiveEdgeColor, strokeWidth: themeClasses.inactiveStrokeWidth, opacity: 0.5 },
+                markerEnd: { type: MarkerType.ArrowClosed, color: themeClasses.inactiveEdgeColor }
+            };
 
-            const isSourcePassed = ['executed', 'current'].includes(sourceNode.status) || sourceNode.type === 'startNode';
-            const isTargetActive = ['executed', 'current'].includes(targetNode.status);
+            const isSourcePassed = ['executed', 'current', 'success', 'running'].includes(sourceNode.status) || sourceNode.type === 'startNode' || sourceNode.id === 'START_NODE';
+            const isTargetActive = ['executed', 'current', 'success', 'running', 'failed'].includes(targetNode.status);
             let isActive = isSourcePassed && isTargetActive;
 
-            if (isActive && (targetNode.type === 'endNode' || targetNode.status === 'current')) {
+            if (isActive && (targetNode.type === 'endNode' || targetNode.id === 'END_OF_WORKFLOW' || ['current', 'running'].includes(targetNode.status))) {
                 if (sourceStats && sourceStats.hasExecutedChild) isActive = false;
             }
 
             return {
                 ...edge,
-                label: null,
+                label: edge.label || null,
                 animated: isActive,
                 style: {
                     ...edge.style,
                     stroke: isActive ? themeClasses.activeEdgeColor : themeClasses.inactiveEdgeColor,
                     strokeWidth: isActive ? themeClasses.activeStrokeWidth : themeClasses.inactiveStrokeWidth,
-                    opacity: isActive ? 1 : 0.5,
+                    opacity: isActive ? 1 : 0.6,
                 },
                 markerEnd: {
                     type: MarkerType.ArrowClosed,
@@ -269,7 +276,7 @@ const FlowInner = ({
                 fitViewOptions={{ padding: 0.2 }}
                 proOptions={{ hideAttribution: true }}
                 defaultEdgeOptions={{
-                    type: mode === 'edit' ? 'smoothstep' : 'straight',
+                    type: 'smoothstep',
                     animated: false,
                 }}
             >
@@ -289,7 +296,7 @@ const FlowInner = ({
                 <>
                     <div className="absolute top-6 left-1/2 -translate-x-1/2 z-50 pointer-events-none">
                         <div className="pointer-events-auto">
-                            <Toolbar isDark={isDark} nodes={editNodes} edges={editEdges} onCancel={onCancel} onClear={() => { setEditNodes(initialEditNodes); setEditEdges([]); }} onFitView={() => fitView({ padding: 0.4, duration: 800 })} phenomenon={phenomenon} onSaveSuccess={onSaveSuccess} />
+                             <Toolbar isDark={isDark} nodes={editNodes} edges={editEdges} workflowId={workflowId} workflowName={workflowName} onCancel={onCancel} onClear={() => { setEditNodes(initialEditNodes); setEditEdges([]); }} onFitView={() => fitView({ padding: 0.4, duration: 800 })} phenomenon={phenomenon} onSaveSuccess={onSaveSuccess} />
                         </div>
                     </div>
                     <div className="absolute justify-center left-8 top-12 bottom-12 w-32 z-40 pointer-events-none flex flex-col min-h-0">
@@ -320,6 +327,8 @@ const UnifiedWorkflow = ({
                              visible = true,
                              importedNodes,
                              importedEdges,
+                             workflowId,
+                             workflowName,
                              onCancel,
                              onSaveSuccess
                          }) => {
@@ -356,10 +365,12 @@ const UnifiedWorkflow = ({
                     viewEdges={edges}
                     onSelectChange={onSelectChange}
                     importedNodes={importedNodes}
-                    importedEdges={importedEdges}
-                    onCancel={onCancel}
-                    onSaveSuccess={onSaveSuccess}
-                />
+                     importedEdges={importedEdges}
+                     workflowId={workflowId}
+                     workflowName={workflowName}
+                     onCancel={onCancel}
+                     onSaveSuccess={onSaveSuccess}
+                 />
             </ReactFlowProvider>
         </div>
     );
