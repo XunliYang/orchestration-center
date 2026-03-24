@@ -26,14 +26,12 @@ const getAgentTheme = (agentName) => {
 
 const AgentNode = ({ data, selected }) => {
     const isDark = data.isDark || false;
-    const status = data.status || 'pending'; // pending, current, executed
-    const agentName = data.agent || 'Agent';
-
-    const agentTheme = useMemo(() => getAgentTheme(agentName), [agentName]);
-    const badgeColorClass = isDark ? agentTheme.dark : agentTheme.light;
+    const status = data.status || 'pending'; // pending, running, success, failed
+    const stepName = data.label || 'Step';
+    const subtasks = data.subtasks || [];
 
     const theme = {
-        bg: isDark ? 'bg-zinc-900/90' : 'bg-white',
+        bg: isDark ? 'bg-zinc-900/95' : 'bg-white',
         border: isDark ? 'border-zinc-700/50' : 'border-slate-200',
         textMain: isDark ? 'text-zinc-100' : 'text-slate-800',
         textSub: isDark ? 'text-zinc-400' : 'text-slate-500',
@@ -43,18 +41,18 @@ const AgentNode = ({ data, selected }) => {
     };
 
     const handleBaseStyle = `
-        /* 1. 基础外观
+        /* 1. 基础外观 */
         !w-[4px] !h-[4px] border-[1.5px] border-white dark:border-zinc-800
         transition-all duration-300 ease-out cursor-crosshair
         
-        /* 2. 悬停反馈 (Hover)：面积增加
+        /* 2. 悬停反馈 (Hover)：面积增加 */
         hover:!w-[28.5px] hover:!h-[28.5px] hover:shadow-sm
         
-        /* 3. 连线起点反馈 (Connecting)：
+        /* 3. 连线起点反馈 (Connecting)： */
         [&.react-flow__handle-connecting]:!w-[8.5px] [&.react-flow__handle-connecting]:!h-[8.5px]
         [&.react-flow__handle-connecting]:ring-2 [&.react-flow__handle-connecting]:ring-black/10 dark:[&.react-flow__handle-connecting]:ring-white/10
         
-        /* 4. 隐形热区：绝对固定为 60x60px
+        /* 4. 隐形热区：绝对固定为 60x60px */
         after:content-[''] after:absolute after:top-1/2 after:left-1/2 after:-translate-x-1/2 after:-translate-y-1/2 
         after:w-[60px] after:h-[60px] after:bg-transparent after:z-10
         
@@ -66,47 +64,69 @@ const AgentNode = ({ data, selected }) => {
         [&.react-flow__handle-valid]:before:w-10 [&.react-flow__handle-valid]:before:h-10 
     `;
 
-    const isCurrent = status === 'current';
-    const isExecuted = status === 'executed';
+    const getStatusColor = (s) => {
+        const normalized = (s || '').toLowerCase();
+        if (normalized === 'running' || normalized === 'executing' || normalized === 'current') return 'bg-blue-500';
+        if (normalized === 'success' || normalized === 'completed' || normalized === 'executed') return 'bg-emerald-500';
+        if (normalized === 'failed' || normalized === 'error') return 'bg-rose-500';
+        return isDark ? 'bg-zinc-700' : 'bg-slate-200';
+    };
 
     return (
         <div
             className={`
-                touch-none relative min-w-[140px] max-w-[350px] rounded-xl border transition-all duration-500
+                touch-none relative min-w-[200px] max-w-[400px] rounded-xl border transition-all duration-500
                 ${theme.bg} ${theme.border} ${theme.shadow} ${theme.textMain}
                 backdrop-blur-sm overflow-hidden
                 ${selected ? 'ring-2 ring-blue-500/50 ring-offset-2 ' + (isDark ? 'ring-offset-zinc-950' : 'ring-offset-white') : ''}
             `}
         >
-            <div className={`h-[3px] w-full transition-colors duration-500 ${agentTheme.bar}`} />
+            <div className={`h-[4px] w-full transition-colors duration-500 bg-blue-500/50`} />
 
-            <div className="px-4 py-4 flex flex-col ">
-                {/* 第一行：Agent标签 + 状态呼吸灯 */}
-                <div className="flex justify-between items-center leading-none mb-1.5 ">
-                    <span className={`text-[12px] font-bold tracking-tighter uppercase px-1.5 py-0.5 rounded-sm transition-colors duration-300 ${badgeColorClass}`}>
-                        {agentName}
-                    </span>
-
-                    <div className="flex items-center gap-1.5" title={`Status: ${status}`}>
+            <div className="px-4 py-3 flex flex-col gap-2">
+                {/* Step Header */}
+                <div className="flex justify-between items-start gap-2">
+                    <div className="flex flex-col">
+                        <span className={`text-[10px] font-bold uppercase tracking-widest ${theme.textSub}`}>Workflow Step</span>
+                        <h3 className="text-[14px] font-bold leading-tight truncate max-w-[280px]">
+                            {stepName}
+                        </h3>
+                    </div>
+                    {/* Overall Status */}
+                    <div className="mt-1">
                         <div className="relative flex h-2.5 w-2.5">
-                            {isCurrent && (
+                            {(status === 'running' || status === 'current') && (
                                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
                             )}
-                            <span className={`relative inline-flex rounded-full h-2.5 w-2.5 transition-colors duration-300 ${
-                                isCurrent ? 'bg-blue-500' :
-                                    isExecuted ? 'bg-emerald-500' :
-                                        (isDark ? 'bg-zinc-700' : 'bg-slate-200')
-                            }`}></span>
+                            <span className={`relative inline-flex rounded-full h-2.5 w-2.5 transition-colors duration-300 ${getStatusColor(status)}`}></span>
                         </div>
                     </div>
                 </div>
 
-                <h4 className={`
-                    text-[12px] font-bold leading-snug break-words whitespace-normal
-                    ${isCurrent ? 'text-blue-500' : (isDark ? 'text-slate-200' : 'text-slate-700')}
-                `}>
-                    {data.skill}
-                </h4>
+                {/* Subtasks List */}
+                <div className="flex flex-col gap-1.5 mt-1">
+                    {subtasks.map((task, idx) => (
+                        <div key={idx} className={`
+                            group/task relative p-2 px-3 rounded-lg border flex flex-col gap-0.5 transition-all
+                            ${isDark ? 'bg-zinc-800/40 border-zinc-700/30 hover:bg-zinc-800' : 'bg-slate-50/50 border-slate-100 hover:bg-slate-100'}
+                        `}>
+                            <div className="flex justify-between items-center">
+                                <span className="text-[9px] font-bold uppercase text-blue-500 tracking-tight opacity-80 truncate max-w-[150px]">
+                                    {task.agent || 'Agent'}
+                                </span>
+                                <div className={`h-1.5 w-1.5 rounded-full ${getStatusColor(task.status)} opacity-60`} />
+                            </div>
+                            <div className={`text-[11px] font-medium leading-tight truncate ${isDark ? 'text-zinc-300' : 'text-slate-700'}`}>
+                                {task.skill || 'No skill specified'}
+                            </div>
+                        </div>
+                    ))}
+                    {subtasks.length === 0 && (
+                        <div className={`text-[10px] italic px-2 py-1 ${theme.textSub} opacity-50`}>
+                            No subtasks configured
+                        </div>
+                    )}
+                </div>
             </div>
 
             <Handle type="target" position={Position.Top} id="t-top" style={{ left: '40%' }} className={`!bg-blue-400 [&.react-flow__handle-valid]:before:bg-blue-400/40 ${handleBaseStyle}`} />

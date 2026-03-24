@@ -108,25 +108,36 @@ export const transformWorkflowToReactFlow = (rawInput) => {
     // 生成节点
     steps.forEach((step) => {
         const nodeId = step.name;
-        const agents = step.subtasks?.map(t => t.agent).join(', ') || 'System';
-        const skills = step.subtasks?.map(t => t.skill).join(', ') || 'None';
-        const nodeStatus = step.subtasks?.some(t => t.status === 'running')
+        // 确保 subtasks 存在
+        const subtasks = step.subtasks || [
+            {
+                agent: step.agent || 'System',
+                skill: step.skill || 'None',
+                status: step.status || 'pending',
+                description: step.description || ''
+            }
+        ];
+        
+        const agents = subtasks.map(t => t.agent).join(', ');
+        const skills = subtasks.map(t => t.skill).join(', ');
+        const nodeStatus = subtasks.some(t => t.status === 'running')
             ? 'running'
-            : (step.subtasks?.every(t => t.status === 'success') ? 'success' : 'pending');
+            : (subtasks.every(t => t.status === 'success') ? 'success' : 'pending');
 
         nodes.push({
             id: nodeId,
             type: 'agentNode',
             position: { x: 0, y: 0 },
-            width: 250,
-            height: 110,
+            width: 260,
+            height: 80 + Math.max(subtasks.length, 1) * 55,
             data: {
                 ...step,
                 label: step.name,
-                description: step.subtasks?.[0]?.description || '',
+                description: subtasks[0]?.description || '',
                 agent: agents,
                 skill: skills,
-                status: nodeStatus
+                status: nodeStatus,
+                subtasks: subtasks 
             }
         });
 
@@ -199,9 +210,7 @@ export const transformReactFlowToPSOP = (nodes, edges, metadata = {}) => {
             let subtasks = [];
             if (data.subtasks && Array.isArray(data.subtasks)) {
                 subtasks = data.subtasks.map(t => ({
-                    description: t.description || data.description || id,
-                    agent: t.agent || data.agent,
-                    skill: t.skill || data.skill,
+                    ...t,
                     status: normalizeStatus(t.status)
                 }));
             } else {
