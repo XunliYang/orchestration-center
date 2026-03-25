@@ -298,7 +298,7 @@ def get_intent_to_psop_prompt(user_intent: str, agent_cards_json: str, psop_sche
 ```
 
 ## 注意事项
-1. 最后一步的next属性设置为：[{"step": "end", "condition": ""}]
+1. 最后一步的next属性设置为：[{{"step": "end", "condition": ""}}]
 2. 保持电信运维的专业术语和逻辑严谨性
 3. 确保生成的PSOP符合格式要求
 4. 仅输出JSON，不要有其他解释性文字
