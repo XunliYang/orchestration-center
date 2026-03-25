@@ -122,16 +122,15 @@ class IntentPsopGenerator(PsopGenerator):
             
             psop_data: PSOP = parsed_data
             
-            # Set workflow name if not provided by LLM
+            # Set workflow name if provided by user
+            if workflow_name:
+                psop_data.name = workflow_name
+
             if not psop_data.name or psop_data.name.strip() == "":
-                if workflow_name:
-                    psop_data.name = workflow_name
-                else:
-                    # Generate name from intent (first 50 chars)
-                    intent_summary = user_intent[:50].strip()
-                    if len(user_intent) > 50:
-                        intent_summary += "..."
-                    psop_data.name = f"工作流: {intent_summary}"
+                intent_summary = user_intent[:50].strip()
+                if len(user_intent) > 50:
+                    intent_summary += "..."
+                psop_data.name = f"工作流: {intent_summary}"
             
             # Store original user intent
             psop_data.user_intent = user_intent
