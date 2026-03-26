@@ -118,7 +118,7 @@ export const transformWorkflowToReactFlow = (rawInput) => {
                 description: step.description || ''
             }
         ];
-        
+
         const agents = subtasks.map(t => t.agent).join(', ');
         const skills = subtasks.map(t => t.skill).join(', ');
         const nodeStatus = subtasks.some(t => normalizeStatus(t.status) === BACKEND_STATUS.RUNNING)
@@ -139,7 +139,7 @@ export const transformWorkflowToReactFlow = (rawInput) => {
                 agent: agents,
                 skill: skills,
                 status: nodeStatus,
-                subtasks: subtasks 
+                subtasks: subtasks
             }
         });
 
@@ -191,7 +191,7 @@ export const transformWorkflowToReactFlow = (rawInput) => {
  */
 export const transformReactFlowToPSOP = (nodes, edges, metadata = {}) => {
     const psopData = {
-        name: metadata.name || "New Workflow",
+        name: metadata.name || metadata.description || "",
         description: metadata.description || "",
         steps: [],
         tags: metadata.tags || []

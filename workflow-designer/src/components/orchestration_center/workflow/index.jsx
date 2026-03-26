@@ -138,6 +138,7 @@ const FlowInner = ({
 
             return {
                 ...edge,
+                type: 'straight',
                 label: edge.label || null,
                 animated: isActive,
                 style: {
@@ -150,7 +151,7 @@ const FlowInner = ({
                     type: MarkerType.ArrowClosed,
                     color: isActive ? themeClasses.activeEdgeColor : themeClasses.inactiveEdgeColor,
                 },
-                zIndex: isActive ? 10 : 0,
+                zIndex: isActive ? 2000 : 1000,
             };
         });
     }, [viewEdges, viewNodes, themeClasses, mode]);
@@ -233,6 +234,8 @@ const FlowInner = ({
         if (mode === 'edit' && importedEdges) {
             setEditEdges(importedEdges.map(edge => ({
                 ...edge,
+                type: 'straight',
+                zIndex: 1000,
                 animated: edge.animated !== undefined ? edge.animated : true,
             })));
             setIsDirty(false);
@@ -338,7 +341,8 @@ const FlowInner = ({
     const onConnect = useCallback((params) => {
         const newEdge = {
             ...params,
-            type: 'smart',
+            type: 'straight',
+            zIndex: 1000,
             animated: true,
             markerEnd: { type: MarkerType.ArrowClosed, color: isDark ? '#3b82f6' : '#2563eb' },
             style: { strokeWidth: 2, stroke: isDark ? '#3b82f6' : '#2563eb' }
@@ -471,8 +475,9 @@ const FlowInner = ({
                 proOptions={{ hideAttribution: true }}
 
                 defaultEdgeOptions={{
-                    type: 'smoothstep',
+                    type: 'straight',
                     animated: false,
+                    zIndex: 1000,
                 }}
             >
                 <Background color={themeClasses.gridColor} gap={20} variant="dots" />

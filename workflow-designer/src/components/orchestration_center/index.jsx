@@ -3,15 +3,15 @@ import yaml, { dump } from 'js-yaml';
 import {
     Search, Loader2, Layout, FileWarning, Hash,
     Activity, Plus, Upload, X, MessageSquare,
-    ChevronRight, Save, Sparkles, Edit3, ChevronLeft, ArrowLeft, Code2, LayoutDashboard
+    ChevronRight, Save, Sparkles, Edit3, ChevronLeft, ArrowLeft, Code2, LayoutDashboard, Trash2
 } from 'lucide-react';
-import { getAgentCards, getWorkflow, getWorkflowById, handlePlan, parsePdf, generateWorkflowFromIntent } from "@/service/api.js";
+import { getAgentCards, getWorkflow, getWorkflowById, handlePlan, parsePdf, generateWorkflowFromIntent, delWorkflowById } from "@/service/api.js";
 import { transformWorkflowToReactFlow } from "./workflow/utils/index.jsx";
 import UnifiedWorkflow from "../orchestration_center/workflow/index.jsx";
+import { useTranslation } from 'react-i18next';
 
-import axios from 'axios';
 
-const MethodCard = ({ icon: Icon, title, onClick, color, loading, progress, status }) => (
+const MethodCard = ({ icon: Icon, title, onClick, color, loading, progress, status, t }) => (
     <button
         onClick={onClick}
         disabled={loading}
@@ -46,12 +46,11 @@ const MethodCard = ({ icon: Icon, title, onClick, color, loading, progress, stat
                 {title}
             </span>
             {loading && (<span className="text-[13px] font-black dark:text-zinc-200 mb-1">
-                {status} {Math.floor(progress)}%
+                {t ? t(status) : status} {Math.floor(progress)}%
             </span>)}
             <div className={`h-1 transition-all duration-500 rounded-full w-0 group-hover:w-8 bg-blue-500`} />
         </div>
 
-        {/* 底部细线条进度条 */}
         {loading && (
             <div className="absolute bottom-0 left-0 w-full h-1.5 bg-zinc-100 dark:bg-zinc-800">
                 <div
@@ -64,12 +63,14 @@ const MethodCard = ({ icon: Icon, title, onClick, color, loading, progress, stat
 );
 const LOADING_STAGES = {
     IDLE: '',
-    PARSING: '正在解析SolutionPackage...',
-    PLANNING: '正在编排工作流...',
-    GENERATING: '正在根据意图生成工作流...',
-    FINALIZING: '正在构建预览...',
+    PARSING: 'orchestration.stage_parsing',
+    PLANNING: 'orchestration.stage_planning',
+    GENERATING: 'orchestration.stage_generating',
+    FINALIZING: 'orchestration.stage_finalizing',
+    DELETING: 'orchestration.stage_deleting',
 };
 const OrchestrationCenter = ({ isDark }) => {
+    const { t } = useTranslation();
     const [workflows, setWorkflows] = useState([]);
     const [selectedId, setSelectedId] = useState(null);
     const [currentWf, setCurrentWf] = useState(null);
@@ -85,6 +86,10 @@ const OrchestrationCenter = ({ isDark }) => {
     const [loading, setLoading] = useState(false);
     const [detailLoading, setDetailLoading] = useState(false);
     const [loadingStatus, setLoadingStatus] = useState(LOADING_STAGES.IDLE);
+
+    // 删除确认相关状态
+    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+    const [wfToDelete, setWfToDelete] = useState(null);
     useEffect(() => {
         let timer;
         if (loading) {
@@ -203,6 +208,30 @@ const OrchestrationCenter = ({ isDark }) => {
         })();
     }, [selectedId]);
 
+    const handleDeleteWorkflow = async () => {
+        if (!wfToDelete) return;
+
+        try {
+            setLoading(true);
+            setLoadingStatus(LOADING_STAGES.DELETING);
+            const res = await delWorkflowById(wfToDelete.id);
+            if (res.status === 'success') {
+                // 如果删除的是当前选中的，重置视图
+                if (selectedId === wfToDelete.id) {
+                    setSelectedId(null);
+                    setActiveView('welcome');
+                }
+                await fetchWorkflows();
+            }
+        } catch (e) {
+            console.error("删除PSOP失败:", e);
+        } finally {
+            setLoading(false);
+            setShowDeleteConfirm(false);
+            setWfToDelete(null);
+        }
+    };
+
     const renderContent = () => {
         switch (activeView) {
             case 'welcome':
@@ -222,14 +251,15 @@ const OrchestrationCenter = ({ isDark }) => {
 
                         <div className="flex gap-8 z-10">
                             <MethodCard
-                                icon={Upload} title="SolutionPackage 导入" color="text-amber-500"
+                                icon={Upload} title={t('orchestration.method_import')} color="text-amber-500"
                                 onClick={() => fileInput.current.click()}
                                 loading={loading && loadingStatus !== LOADING_STAGES.IDLE}
                                 progress={progress}
-                                status={loadingStatus === LOADING_STAGES.PARSING ? 'Parsing PDF' : '编排中'}
+                                status={loadingStatus}
+                                t={t}
                             />
                             <MethodCard
-                                icon={Layout} title="图形化编排" color="text-blue-500"
+                                icon={Layout} title={t('orchestration.method_graph')} color="text-blue-500"
                                 onClick={() => {
                                     setSelectedId(null);
                                     setActiveView('editor');
@@ -238,11 +268,12 @@ const OrchestrationCenter = ({ isDark }) => {
                                 }}
                             />
                             <MethodCard
-                                icon={MessageSquare} title="自然语言编排" color="text-purple-500"
+                                icon={MessageSquare} title={t('orchestration.method_ai')} color="text-purple-500"
                                 onClick={() => setActiveView('ai')}
                                 loading={loading && loadingStatus === LOADING_STAGES.GENERATING}
                                 progress={progress}
-                                status="AI Generation"
+                                status={loadingStatus}
+                                t={t}
                             />
                         </div>
 
@@ -270,7 +301,7 @@ const OrchestrationCenter = ({ isDark }) => {
                                             <Sparkles size={20} />
                                         </div>
                                         <div>
-                                            <h3 className="text-base font-black dark:text-white uppercase tracking-tight">自然语言编排</h3>
+                                            <h3 className="text-base font-black dark:text-white uppercase tracking-tight">{t('orchestration.ai_orchestrator')}</h3>
                                         </div>
                                     </div>
                                     <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
@@ -334,7 +365,7 @@ const OrchestrationCenter = ({ isDark }) => {
                             className="mt-12 group flex items-center gap-2 text-[11px] font-black text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200 transition-all uppercase tracking-[0.2em]"
                         >
                             <div className="w-6 h-[1px] bg-zinc-300 dark:bg-zinc-700 group-hover:w-10 transition-all" />
-                            Back to Options
+                            {t('orchestration.back_to_options')}
                         </button>
                     </div>
                 );
@@ -403,8 +434,7 @@ const OrchestrationCenter = ({ isDark }) => {
                 <div
                     className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[2.5rem] p-6 shadow-xl">
                     <div className="flex items-center justify-between mb-5">
-                        <h1 className="text-xl font-black dark:text-white tracking-tighter uppercase">Orchestration
-                            Center</h1>
+                        <h1 className="text-xl font-black dark:text-white tracking-tighter uppercase">{t('orchestration.title')}</h1>
                         <button
                             onClick={() => {
                                 setSelectedId(null);
@@ -418,7 +448,7 @@ const OrchestrationCenter = ({ isDark }) => {
                     <div className="relative">
                         <input
                             type="text"
-                            placeholder="Filter..."
+                            placeholder={t('orchestration.search')}
                             className="w-full pl-10 pr-4 py-3 bg-zinc-50 dark:bg-zinc-800 rounded-2xl text-xs font-bold outline-none"
                             onChange={e => setSearchTerm(e.target.value)}
                         />
@@ -458,11 +488,21 @@ const OrchestrationCenter = ({ isDark }) => {
                                             {wf.name}
                                         </h3>
                                     </div>
+                                    <button
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            setWfToDelete(wf);
+                                            setShowDeleteConfirm(true);
+                                        }}
+                                        className="opacity-0 group-hover:opacity-100 p-1.5 hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-900/30 dark:hover:text-red-400 rounded-lg transition-all"
+                                    >
+                                        <Trash2 size={14} />
+                                    </button>
                                 </div>
 
                                 <div
                                     className={`pl-8 text-[11px] font-black uppercase truncate max-w-[200px] ${isSelected ? 'text-blue-600 dark:text-blue-400' : 'text-zinc-400'}`}>
-                                    {wf.tags?.length > 0 ? wf.tags.join(', ') : 'NO TAGS'}
+                                    {wf.tags?.length > 0 ? wf.tags.join(', ') : t('orchestration.no_tags')}
                                 </div>
                             </div>
                         );
@@ -491,7 +531,7 @@ const OrchestrationCenter = ({ isDark }) => {
     `}
                             >
                                 <Code2 size={14} />
-                                <span>Edit</span>
+                                <span>{t('orchestration.edit')}</span>
                             </button>
                         )}
                     </div>
@@ -505,6 +545,45 @@ const OrchestrationCenter = ({ isDark }) => {
             <input type="file" ref={fileInput} className="hidden"
                 accept=".pdf"
                 onChange={handleFileChange} />
+
+            {/* 删除确认弹窗 */}
+            {showDeleteConfirm && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center bg-zinc-950/20 backdrop-blur-sm animate-in fade-in duration-300">
+                    <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[2.5rem] p-8 shadow-2xl w-full max-w-md scale-in-center animate-in zoom-in-95 duration-300">
+                        <div className="flex flex-col items-center text-center">
+                            <div className="p-4 bg-red-50 dark:bg-red-900/20 text-red-500 rounded-2xl mb-6">
+                                <Trash2 size={32} />
+                            </div>
+                            <h3 className="text-xl font-black dark:text-white mb-2 uppercase tracking-tight">
+                                {t('orchestration.delete_workflow_title')}
+                            </h3>
+                            <p className="text-zinc-500 dark:text-zinc-400 text-sm mb-8">
+                                {t('orchestration.delete_workflow_confirm')}
+                                <br />
+                                <span className="font-bold text-zinc-900 dark:text-zinc-100 italic">"{wfToDelete?.name}"</span>
+                            </p>
+
+                            <div className="flex gap-4 w-full">
+                                <button
+                                    onClick={() => {
+                                        setShowDeleteConfirm(false);
+                                        setWfToDelete(null);
+                                    }}
+                                    className="flex-1 px-6 py-3 rounded-xl bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-400 font-bold text-xs uppercase tracking-widest hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-all"
+                                >
+                                    {t('common.cancel')}
+                                </button>
+                                <button
+                                    onClick={handleDeleteWorkflow}
+                                    className="flex-1 px-6 py-3 rounded-xl bg-red-500 text-white font-bold text-xs uppercase tracking-widest hover:bg-red-600 shadow-lg shadow-red-500/20 active:scale-95 transition-all"
+                                >
+                                    {t('common.delete')}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

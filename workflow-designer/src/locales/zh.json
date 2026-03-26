@@ -28,6 +28,9 @@
   "orchestration": {
     "title": "编排中心",
     "list_label": "核心运维流",
+    "method_import": "SolutionPackage 导入",
+    "method_graph": "图形化编排",
+    "method_ai": "自然语言编排",
     "edit_mode": "编辑模式",
     "preview_mode": "预览模式",
     "node_logic": "节点跳转逻辑",
@@ -40,8 +43,20 @@
     "apply_change": "应用修改",
     "direct": "直接跳转",
     "graph_mode": "图形化编排",
+    "build_workflow": "Build Workflow",
+    "no_tags": "无标签",
+    "back_to_options": "返回选项",
+    "ai_orchestrator": "AI 编排助手",
+    "edit": "编辑",
     "invalid_file": "请上传一个有效的JSON文件。",
-    "incorrect_content": "无法解析json文件，请检查文件内容。"
+    "incorrect_content": "无法解析json文件，请检查文件内容。",
+    "delete_workflow_title": "删除工作流",
+    "delete_workflow_confirm": "确定要删除该工作流吗？此操作无法撤销。",
+    "stage_parsing": "正在解析SolutionPackage...",
+    "stage_planning": "正在编排工作流...",
+    "stage_generating": "正在根据意图生成工作流...",
+    "stage_finalizing": "正在构建预览...",
+    "stage_deleting": "正在删除工作流..."
   },
   "workflow": {
     "title": "编排流程",
@@ -142,6 +157,8 @@
     "confirm": "确定",
     "cancel": "取消",
     "save": "保存",
-    "confirm_delete": "确认删除？"
+    "confirm_delete": "确认删除？",
+    "delete_success": "删除成功",
+    "delete_failed": "删除失败"
   }
 }
