@@ -3,8 +3,27 @@
     "title": "A2A-T Prototype",
     "tabs": {
       "agents": "Registry Center",
-      "orchestration": "Orchestration Center"
+      "orchestration": "Orchestration Center",
+      "execution": "Execution Center"
     }
+  },
+  "execution": {
+    "title": "Execution Center",
+    "execute": "Execute",
+    "history": "Execution History",
+    "status": "Status",
+    "running": "Running",
+    "completed": "Completed",
+    "failed": "Failed",
+    "log": "Event Log",
+    "agent_request": "Agent Request",
+    "agent_response": "Agent Response",
+    "init": "Initializing...",
+    "start": "Starting...",
+    "close": "Connection Closed",
+    "error": "Execution Error",
+    "no_selection": "Select a workflow to execute",
+    "start_execution": "Start Execution"
   },
   "orchestration": {
     "title": "Orchestration",
@@ -85,6 +104,10 @@
       "noEdge": "Node missing output connection: Please complete the topology",
       "noEnd": "Workflow missing an End Node",
       "yamlError": "YAML generation failed"
+    },
+    "exit": {
+      "title": "Confirm exit",
+      "desc": "You have unsaved changes. Exiting will discard these changes. Are you sure?"
     }
   },
   "registry": {

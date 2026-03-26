@@ -3,8 +3,27 @@
     "title": "A2A-T Prototype",
     "tabs": {
       "agents": "注册中心",
-      "orchestration": "编排中心"
+      "orchestration": "编排中心",
+      "execution": "执行中心"
     }
+  },
+  "execution": {
+    "title": "执行中心",
+    "execute": "开始执行",
+    "history": "执行记录",
+    "status": "状态",
+    "running": "执行中",
+    "completed": "已完成",
+    "failed": "已失败",
+    "log": "事件日志",
+    "agent_request": "Agent 请求",
+    "agent_response": "Agent 响应",
+    "init": "初始化引擎...",
+    "start": "开始执行工作流...",
+    "close": "连接已关闭",
+    "error": "执行发生错误",
+    "no_selection": "请选择一个工作流进行执行",
+    "start_execution": "启动执行"
   },
   "orchestration": {
     "title": "编排中心",
@@ -84,6 +103,10 @@
       "noEdge": "节点 [{{id}}] 缺少输出连线",
       "noEnd": "流程缺少结束节点",
       "yamlError": "YAML生成失败"
+    },
+    "exit": {
+      "title": "确认退出",
+      "desc": "您有未保存的修改，退出将丢失这些修改。确定要退出吗？"
     }
   },
   "registry": {
