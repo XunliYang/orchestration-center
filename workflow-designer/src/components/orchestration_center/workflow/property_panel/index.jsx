@@ -2,9 +2,23 @@ import React, {useCallback, useEffect, useMemo} from 'react';
 import KvIndex from "@/components/orchestration_center/workflow/kv_editor/index.jsx";
 import {useTranslation} from "react-i18next";
 import DeleteConfirm from "@/components/common/pop_confirm/index.jsx";
+import { getAgentCards } from "@/service/api.js";
 
-const PropertyPanel = ({ selectedElement, nodes, edges, setPhenomenon,setNodes, setEdges,isDark,onDelete}) => {
+const PropertyPanel = ({ selectedElement, nodes, edges, setPhenomenon,setNodes, setEdges,isDark,onDelete, onClose}) => {
     const { t } = useTranslation();
+    const [allAgents, setAllAgents] = React.useState([]);
+
+    useEffect(() => {
+        const fetchAgents = async () => {
+            try {
+                const res = await getAgentCards();
+                setAllAgents(res.data || []);
+            } catch (err) {
+                console.error("Failed to fetch agent cards in property panel:", err);
+            }
+        };
+        fetchAgents();
+    }, []);
     const theme = {
         container: isDark ? 'bg-zinc-950 text-zinc-300' : 'bg-white text-zinc-800',
         emptyBg: isDark ? 'bg-zinc-950' : 'bg-zinc-50/50',
@@ -22,6 +36,133 @@ const PropertyPanel = ({ selectedElement, nodes, edges, setPhenomenon,setNodes, 
             return nodes.find(n => n.id === selectedElement.id);
         }
     }, [selectedElement, nodes, edges]);
+    const updateData = useCallback((key, value, extraProps = {}) => {
+        if (!selectedElement) return;
+
+        const isNode = !('source' in selectedElement);
+
+        if (isNode) {
+            setNodes((nds) =>
+                nds.map((node) => {
+                    if (node.id === selectedElement.id) {
+                        return { ...node, ...extraProps, data: { ...node.data, [key]: value } };
+                    }
+                    return node;
+                })
+            );
+        } else {
+            setEdges((eds) =>
+                eds.map((edge) => {
+                    if (edge.id === selectedElement.id) {
+                        const updated = { ...edge, ...extraProps, data: { ...edge.data, [key]: value } };
+                        if (key === 'condition') {
+                            updated.label = value;
+                        }
+                        return updated;
+                    }
+                    return edge;
+                })
+            );
+        }
+    }, [selectedElement, setNodes, setEdges]);
+
+    useEffect(() => {
+        const d = activeElement?.data || {};
+        if (d.skill && (!d.inputs || Object.keys(d.inputs).length === 0)) {
+            const currentSkill = d.skillsList?.find(s => s.name === d.skill);
+            if (currentSkill && currentSkill.inputs) {
+                const parsedInputs = {};
+                currentSkill.inputs.split('\n').forEach(line => {
+                    const [key, ...descParts] = line.split(':');
+                    if (key) {
+                        parsedInputs[key.trim()] = descParts.join(':').trim();
+                    }
+                });
+
+                updateData('inputs', parsedInputs);
+                console.log("初始化：已自动解析并同步 inputDefine");
+            }
+        }
+    }, [activeElement?.data?.skill, activeElement?.data?.skillsList, updateData]);
+
+    useEffect(() => {
+        const d = activeElement?.data || {};
+        if (d.skill && (!d.outputs || Object.keys(d.outputs).length === 0)) {
+            const currentSkill = d.skillsList?.find(s => s.name === d.skill);
+            if (currentSkill && currentSkill.outputs) {
+                const parsedInputs = {};
+                currentSkill.outputs.split('\n').forEach(line => {
+                    const [key, ...descParts] = line.split(':');
+                    if (key) {
+                        parsedInputs[key.trim()] = descParts.join(':').trim();
+                    }
+                });
+
+                updateData('outputs', parsedInputs);
+                console.log("初始化：已自动解析并同步 outputDefine");
+            }
+        }
+    }, [activeElement?.data?.skill, activeElement?.data?.skillsList, updateData]);
+
+    const handleRemoveSubtask = (idx) => {
+        const d = activeElement?.data || {};
+        if (!d.subtasks) return;
+        const newSubtasks = d.subtasks.filter((_, i) => i !== idx);
+        const newHeight = 80 + Math.max(newSubtasks.length, 1) * 55;
+        updateData('subtasks', newSubtasks, { height: newHeight });
+    };
+
+    const handleDelete = () => {
+        onDelete();
+    }
+
+    const handleSubtaskSkillChange = (idx, selectedName) => {
+        const d = activeElement?.data || {};
+        if (!d.subtasks) return;
+        const newSubtasks = [...d.subtasks];
+        const task = newSubtasks[idx];
+        const agentInfo = allAgents.find(a => (a.name || a.id) === task.agent);
+        const availableSkills = task.skillsList || agentInfo?.skills || d.skillsList || [];
+        const selectedSkill = availableSkills.find(s => s.name === selectedName);
+
+        if (selectedSkill) {
+            const parsedInputs = {};
+            if (selectedSkill.inputs) {
+                selectedSkill.inputs.split('\n').forEach(line => {
+                    const [key, ...descParts] = line.split(':');
+                    if (key) {
+                        parsedInputs[key.trim()] = descParts.join(':').trim();
+                    }
+                });
+            }
+
+            const parsedOutputs = {};
+            if (selectedSkill.outputs) {
+                selectedSkill.outputs.split('\n').forEach(line => {
+                    const [key, ...descParts] = line.split(':');
+                    if (key) {
+                        parsedOutputs[key.trim()] = descParts.join(':').trim();
+                    }
+                });
+            }
+
+            newSubtasks[idx] = {
+                ...task,
+                skill: selectedName,
+                description: selectedSkill.description || task.description
+            };
+            
+            if (newSubtasks.length === 1) {
+                updateData('skill', selectedName);
+                updateData('inputs', parsedInputs);
+                updateData('outputs', parsedOutputs);
+                updateData('description', selectedSkill.description || task.description);
+            }
+            
+            updateData('subtasks', newSubtasks);
+        }
+    };
+
     if (!activeElement) {
         return (
             <div className={`w-80 h-full flex flex-col items-center justify-center p-8 text-center transition-colors ${theme.emptyBg}`}>
@@ -44,88 +185,6 @@ const PropertyPanel = ({ selectedElement, nodes, edges, setPhenomenon,setNodes, 
     };
     const isNode = !('source' in activeElement);
     const data = activeElement.data || {};
-    const updateData = useCallback((key, value) => {
-        if (!activeElement) return;
-
-        const isNode = !('source' in activeElement); // 判断是否为节点
-
-        if (isNode) {
-            setNodes((nds) =>
-                nds.map((node) => {
-                    if (node.id === activeElement.id) {
-                        return { ...node, data: { ...node.data, [key]: value } };
-                    }
-                    return node;
-                })
-            );
-        } else {
-            setEdges((eds) =>
-                eds.map((edge) =>
-                    edge.id === activeElement.id
-                        ? { ...edge, data: { ...edge.data, [key]: value } }
-                        : edge
-                )
-            );
-        }
-    }, [activeElement, setNodes, setEdges]);
-    const handleDelete = () => {
-        onDelete();
-    }
-    const handleSkillChange = (selectedName) => {
-        const selectedSkill = data.skillsList.find(s => s.name === selectedName);
-
-        if (selectedSkill) {
-            const parsedInputs = {};
-            if (selectedSkill.inputs) {
-                selectedSkill.inputs.split('\n').forEach(line => {
-                    const [key, ...descParts] = line.split(':');
-                    if (key) {
-                        parsedInputs[key.trim()] = descParts.join(':').trim();
-                    }
-                });
-            }
-
-            updateData('skill', selectedName);
-            updateData('inputs', parsedInputs);
-        }
-    };
-    useEffect(() => {
-        if (data.skill && (!data.inputs || Object.keys(data.inputs).length === 0)) {
-
-            const currentSkill = data.skillsList?.find(s => s.name === data.skill);
-
-            if (currentSkill && currentSkill.inputs) {
-                const parsedInputs = {};
-                currentSkill.inputs.split('\n').forEach(line => {
-                    const [key, ...descParts] = line.split(':');
-                    if (key) {
-                        parsedInputs[key.trim()] = descParts.join(':').trim();
-                    }
-                });
-
-                updateData('inputs', parsedInputs);
-                console.log("初始化：已自动解析并同步 inputDefine");
-            }
-        }
-    }, [data.skill, data.skillsList]);
-
-    useEffect(() => {
-        if (data.skill && (!data.outputs || Object.keys(data.outputs).length === 0)) {
-            const currentSkill = data.skillsList?.find(s => s.name === data.skill);
-            if (currentSkill && currentSkill.outputs) {
-                const parsedInputs = {};
-                currentSkill.outputs.split('\n').forEach(line => {
-                    const [key, ...descParts] = line.split(':');
-                    if (key) {
-                        parsedInputs[key.trim()] = descParts.join(':').trim();
-                    }
-                });
-
-                updateData('outputs', parsedInputs);
-                console.log("初始化：已自动解析并同步 inputDefine");
-            }
-        }
-    }, [data.skill, data.skillsList]);
     const renderSafeValue = (val) => {
         if (val === null || val === undefined) return '-';
         if (typeof val === 'object') {
@@ -158,40 +217,80 @@ const PropertyPanel = ({ selectedElement, nodes, edges, setPhenomenon,setNodes, 
                 {isNode ? (
                     <>
 
-                        <ReadOnlyField label={t('workflow.panel.agentName')} value={data.agent} isDark={isDark} />
+                        <ReadOnlyField label={t('workflow.panel.stepName') || 'Step Name'} value={data.label} isDark={isDark} />
 
-                        <Field
-                            label={t('workflow.panel.taskDesc')}
-                            value={data.task}
-                            onChange={(v) => updateData('task', v)}
-                            placeholder={t('workflow.panel.taskPlaceholder')}
-                            isDark={isDark}
-                            isTextArea
-                        />
-
-                        {data.skillsList?.length > 0 ? (
-                            <div className="space-y-1.5">
-                                <label className={`text-[14px] ml-1 font-bold  tracking-wide ${theme.label}`}>
-                                    {t('workflow.panel.selectSkill')}
+                        {data.subtasks && data.subtasks.length > 0 ? (
+                            <div className="space-y-3">
+                                <label className={`text-[12px] ml-1 font-bold uppercase tracking-widest ${theme.label}`}>
+                                    {t('workflow.panel.subtasks') || 'Subtasks'} ({data.subtasks.length})
                                 </label>
-                                <div className="relative">
-                                    <select
-                                        className={`w-full px-3 py-2 rounded-lg text-sm appearance-none cursor-pointer transition-all outline-none border ${theme.inputArea}`}
-                                        value={data.skill || ''}
-                                        onChange={(e) => handleSkillChange(e.target.value)}
-                                    >
-                                        <option value="" disabled>{t('workflow.panel.placeholderSelect')}</option>
-                                        {data.skillsList.map((skill, idx) => (
-                                            <option key={`${skill.id}-${idx}`} value={skill.name}>{skill.name}</option>
-                                        ))}
-                                    </select>
-                                    <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-zinc-500">
-                                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
-                                    </div>
+                                <div className="flex flex-col gap-2.5">
+                                    {data.subtasks.map((task, idx) => (
+                                        <div key={idx} className={`group/task relative p-3 rounded-xl border transition-all ${isDark ? 'bg-zinc-900 border-zinc-800/50' : 'bg-zinc-50 border-zinc-200/50 shadow-sm'}`}>
+                                            <div className="flex justify-between items-center mb-1.5">
+                                                <span className="text-[10px] font-bold text-blue-500 uppercase tracking-tight">{task.agent}</span>
+                                                <div className="flex items-center gap-2">
+                                                    <div className="flex items-center gap-1.5">
+                                                        <div className={`w-1.5 h-1.5 rounded-full ${
+                                                            (task.status === 'success' || task.status === 'completed') ? 'bg-emerald-500' :
+                                                                (task.status === 'running' || task.status === 'current') ? 'bg-blue-500' :
+                                                                    (task.status === 'failed' || task.status === 'error') ? 'bg-rose-500' :
+                                                                        'bg-zinc-400'
+                                                        }`} />
+                                                        <span className="text-[10px] opacity-60 uppercase font-medium">{task.status}</span>
+                                                    </div>
+                                                    <button
+                                                        onClick={() => handleRemoveSubtask(idx)}
+                                                        className="p-1 hover:bg-red-500/10 rounded-md text-red-500 opacity-0 group-hover/task:opacity-100 transition-opacity"
+                                                        title="Remove subtask"
+                                                    >
+                                                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            <div className="relative mt-1">
+                                                <select
+                                                    value={task.skill}
+                                                    onChange={(e) => handleSubtaskSkillChange(idx, e.target.value)}
+                                                    className={`
+                                                        w-full px-2 py-1.5 text-[12px] font-bold rounded-lg border appearance-none outline-none transition-all
+                                                        ${isDark ? 'bg-zinc-800 border-zinc-700 text-zinc-200 focus:border-blue-500' : 'bg-white border-zinc-200 text-slate-800 focus:border-blue-400'}
+                                                    `}
+                                                    style={{ paddingRight: '24px' }}
+                                                >
+                                                    {(() => {
+                                                        const agentInfo = allAgents.find(a => (a.name || a.id) === task.agent);
+                                                        const availableSkills = task.skillsList || agentInfo?.skills || data.skillsList || [];
+                                                        return (
+                                                            <>
+                                                                {availableSkills.map(s => (
+                                                                    <option key={s.name} value={s.name}>{s.name}</option>
+                                                                ))}
+                                                                {!availableSkills.some(s => s.name === task.skill) && (
+                                                                    <option value={task.skill}>{task.skill}</option>
+                                                                )}
+                                                            </>
+                                                        );
+                                                    })()}
+                                                </select>
+                                                <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none opacity-50">
+                                                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                                                </div>
+                                            </div>
+                                            {task.description && (
+                                                <p className={`text-[12px] mt-1.5 leading-relaxed opacity-70 ${isDark ? 'text-zinc-400' : 'text-slate-600'}`}>
+                                                    {task.description}
+                                                </p>
+                                            )}
+                                        </div>
+                                    ))}
                                 </div>
                             </div>
                         ) : (
-                            <ReadOnlyField label={t('workflow.panel.executeSkill')} value={data.skill} isDark={isDark} />
+                            <>
+                                <ReadOnlyField label={t('workflow.panel.agentName')} value={data.agent} isDark={isDark} />
+                                <ReadOnlyField label={t('workflow.panel.executeSkill')} value={data.skill} isDark={isDark} />
+                            </>
                         )}
                         <div className="space-y-2">
                             <label className={`text-[14px] ml-1 font-bold uppercase tracking-wide ${theme.label}`}>
@@ -259,7 +358,10 @@ const PropertyPanel = ({ selectedElement, nodes, edges, setPhenomenon,setNodes, 
             <div className={`p-4 border-t sticky bottom-0 transition-colors ${theme.footer}`}>
                 <button
                     className={`w-full py-2.5 text-xs font-bold rounded-xl transition-all active:scale-95 shadow-lg ${theme.confirmBtn}`}
-                    onClick={() => console.log('Current Config:', data)}
+                    onClick={() => {
+                        console.log('Confirmed Config:', data);
+                        if (onClose) onClose();
+                    }}
                 >
                     {t('workflow.panel.confirm')}
                 </button>
