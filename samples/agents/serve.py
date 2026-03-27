@@ -11,11 +11,17 @@ from urllib.parse import urlparse
 from framework import AgentCardLib
 from samples.agents.energy_saving_agent import EnergySavingAgentExecutor
 from samples.agents.energy_saving_intent_agent import EnergySavingIntentAgentExecutor
+from samples.agents.live_streaming_agent import LiveStreamingAgentExecutor
+from samples.agents.assurance_agent import AssuranceAgentExecutor
+from samples.agents.ran_agent import RanAgentExecutor
 
 async def start_server(agent_card: AgentCard, registry_url: str, port: int, host: str = "127.0.0.1") -> None:
     agent2class = {
         "RAN Energy Saving Agent": EnergySavingAgentExecutor,
-        "Energy Saving Intent Agent": EnergySavingIntentAgentExecutor
+        "Energy Saving Intent Agent": EnergySavingIntentAgentExecutor,
+        "live-streaming-agent": LiveStreamingAgentExecutor,
+        "assurance-agent": AssuranceAgentExecutor,
+        "ran-agent": RanAgentExecutor
     }
     agent_name = agent_card.name
     agent_class = agent2class.get(agent_name)
