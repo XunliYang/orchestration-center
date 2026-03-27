@@ -65,3 +65,81 @@ agents:
       stateTransitionHistory: true
     defaultInputModes: [ "text" ]
     defaultOutputModes: [ "text" ]
+  - name: "live-streaming-agent"
+    description: "负责赛事需求的解析与监控。"
+    provider:
+      organization: "Huawei"
+      url: ""
+    protocolVersion: "0.3.0"
+    version: "0.1.0"
+    url: "http://127.0.0.1:8901"
+    iconUrl: ""
+    skills:
+      - id: "info-parsing"
+        name: "赛事信息解析"
+        description: "提取赛事的路线与业务需求"
+        tags: [ "live", "info" ]
+      - id: "kqi-monitoring"
+        name: "KQI指标监控"
+        description: "实时反馈保障任务关键质量指标及任务状态"
+        tags: [ "live", "monitoring" ]
+    capabilities:
+      pushNotifications: false
+      streaming: false
+      stateTransitionHistory: true
+    defaultInputModes: [ "text" ]
+    defaultOutputModes: [ "text" ]
+
+  - name: "assurance-agent"
+    description: "负责保障策略及其恢复策略的生成。"
+    provider:
+      organization: "Huawei"
+      url: ""
+    protocolVersion: "0.3.0"
+    version: "0.1.0"
+    url: "http://127.0.0.1:8902"
+    iconUrl: ""
+    skills:
+      - id: "strategy-generation"
+        name: "策略生成"
+        description: "将赛事保障需求转换为网络需求，包含带宽上下行要求等"
+        tags: [ "assurance", "strategy" ]
+      - id: "recovery-delivery"
+        name: "恢复策略下发"
+        description: "恢复保障前网络配置"
+        tags: [ "assurance", "recovery" ]
+    capabilities:
+      pushNotifications: false
+      streaming: false
+      stateTransitionHistory: true
+    defaultInputModes: [ "text" ]
+    defaultOutputModes: [ "text" ]
+
+  - name: "ran-agent"
+    description: "负责无线网络的分析、规划与策略执行。"
+    provider:
+      organization: "Huawei"
+      url: ""
+    protocolVersion: "0.3.0"
+    version: "0.1.0"
+    url: "http://127.0.0.1:8903"
+    iconUrl: ""
+    skills:
+      - id: "analysis-eval"
+        name: "分析评估"
+        description: "分析网络负载现状"
+        tags: [ "ran", "analysis" ]
+      - id: "plan-design"
+        name: "方案规划"
+        description: "根据网络负载现状及网络保障需求规划网络策略方案"
+        tags: [ "ran", "plan" ]
+      - id: "net-exec"
+        name: "网络策略执行"
+        description: "执行或恢复网络策略"
+        tags: [ "ran", "exec" ]
+    capabilities:
+      pushNotifications: false
+      streaming: false
+      stateTransitionHistory: true
+    defaultInputModes: [ "text" ]
+    defaultOutputModes: [ "text" ]
