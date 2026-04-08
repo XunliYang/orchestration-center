@@ -4,9 +4,10 @@ import json
 import asyncio
 import threading
 import queue
+import time
 from typing import Optional, List, Any
 
-import uvicorn
+import anyio
 from a2a.types import AgentCard
 from fastapi import FastAPI, UploadFile, File, HTTPException, Request, Depends
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -16,7 +17,11 @@ from pydantic import BaseModel
 from starlette import status
 from starlette.responses import Response
 
-from common.config import MAX_URL_LENGTH, MAX_REQUEST_BODY_SIZE
+from common.config import MAX_URL_LENGTH, MAX_REQUEST_BODY_SIZE, CONN_MAX, CONN_TIMEOUT, \
+    FLOW_CTL_PARALLEL_RETRIEVE_PSOP, FLOW_CTL_PARALLEL_GENERATE_PSOP, FLOW_CTL_PARALLEL_AGENT_CARDS, \
+    FLOW_CTL_PARALLEL_DELETE_PSOP, FLOW_CTL_PARALLEL_SAVE_PSOP, FLOW_CTL_PARALLEL_ONE_PSOP, FLOW_CTL_PARALLEL_ALL_PSOPS, \
+    FLOW_CTL_PARALLEL_PLAN, FLOW_CTL_PARALLEL_PARSE_PDF
+from common.util.config_util import get_conf
 from framework.orchestration.model.preflow import PreFlow
 from framework.orchestration.model.psop import PSOP
 from framework.orchestration.psop_generator import PsopGenerator
@@ -39,10 +44,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+config = get_conf()
 
-app.add_middleware(ConnectionLimitMiddleware, max_connections=10)
+app.add_middleware(ConnectionLimitMiddleware, max_connections=int(config.get(CONN_MAX)))
 
-app.add_middleware(TimeoutMiddleware, timeout_seconds=30)
+app.add_middleware(TimeoutMiddleware, timeout_seconds=int(config.get(CONN_TIMEOUT)))
 
 
 @app.middleware("http")
@@ -67,7 +73,7 @@ async def security_middleware(request: Request, call_next):
                 body_chunks.append(chunk)
             request._body = b''.join(body_chunks)
         except Exception as e:
-            logger.error(f"aaaaaaaaaaaaaaaaa: {e}")
+            logger.error(f"Bad Request: {e}")
             return Response(
                 content=f"Bad Request",
                 status_code=status.HTTP_400_BAD_REQUEST
@@ -144,23 +150,27 @@ class RetrieveIntentResponse(BaseModel):
     message: str
     data: Optional[dict] = None
 
-
+parse_pdf_semaphore = anyio.Semaphore(int(config.get(FLOW_CTL_PARALLEL_PARSE_PDF)))
 @app.post("/parse-pdf", response_model=ParsePDFResponse)
-async def parse_pdf(file: UploadFile = File(...), _: Any = Depends(RateLimiter("parse_pdf"))):
+async def parse_pdf(file: UploadFile = File(...), _: Any = Depends(RateLimiter(config, "parse_pdf"))):
     """
     解析PDF文件，提取工作流定义
     """
-    # 验证文件类型
-    if not file.filename or not file.filename.lower().endswith('.pdf'):
-        raise HTTPException(status_code=400, detail="仅支持 PDF 文件")
-
-    # 保存临时文件
-    with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp:
-        content = await file.read()
-        tmp.write(content)
-        tmp_file_path = tmp.name
-
+    acquired = False
     try:
+        parse_pdf_semaphore.acquire_nowait()
+        acquired = True
+
+        # 验证文件类型
+        if not file.filename or not file.filename.lower().endswith('.pdf'):
+            raise HTTPException(status_code=400, detail="仅支持 PDF 文件")
+
+        # 保存临时文件
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp:
+            content = await file.read()
+            tmp.write(content)
+            tmp_file_path = tmp.name
+
         parser = SolutionPackageParser()
         pre_md = parser.parse_pdf_chapter(
             tmp_file_path,
@@ -179,19 +189,27 @@ async def parse_pdf(file: UploadFile = File(...), _: Any = Depends(RateLimiter("
             message="PDF文件解析成功",
             content=preflow.model_dump_json()
         )
+    except anyio.WouldBlock as e:
+        logger.error(f"Server is busy: {str(e)}")
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=f"Server is busy: {str(e)}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"解析失败：{str(e)}")
     finally:
         if os.path.exists(tmp_file_path):
             os.unlink(tmp_file_path)
+        if acquired:
+            parse_pdf_semaphore.release()
 
-
+plan_semaphore = anyio.Semaphore(int(config.get(FLOW_CTL_PARALLEL_PLAN)))
 @app.post("/plan", response_model=PlanResponse)
-async def plan(request: PlanRequest, _: Any = Depends(RateLimiter("plan"))):
+async def plan(request: PlanRequest, _: Any = Depends(RateLimiter(config, "plan"))):
     """
     根据PreFlow和AgentCards生成PSOP工作流
     """
+    acquired = False
     try:
+        plan_semaphore.acquire_nowait()
+        acquired = True
         generator = PsopGenerator()
         workflow = generator.generate_psop_workflow(
             PreFlow.model_validate(request.preflow),
@@ -203,16 +221,29 @@ async def plan(request: PlanRequest, _: Any = Depends(RateLimiter("plan"))):
             status="success",
             data=workflow.model_dump_json()
         )
+    except anyio.WouldBlock as e:
+        logger.error(f"Server is busy: {str(e)}")
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=f"Server is busy: {str(e)}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"规划失败 : {str(e)}")
+    finally:
+        if acquired:
+            plan_semaphore.release()
+
+
+all_psop_semaphore = anyio.Semaphore(int(config.get(FLOW_CTL_PARALLEL_ALL_PSOPS)))
 
 
 @app.get("/psops", response_model=PSOPListResponse)
-async def get_all_psops(limit: int = 10, workflow_type: str = 'psop', _: Any = Depends(RateLimiter("get_all_psops"))):
+async def get_all_psops(limit: int = 10, workflow_type: str = 'psop',
+                        _: Any = Depends(RateLimiter(config, "get_all_psops"))):
     """
     获取所有PSOP工作流列表
     """
+    acquired = False
     try:
+        all_psop_semaphore.acquire_nowait()
+        acquired = True
         recent_workflows = retrieval.list_recent_workflows(limit=limit, workflow_type=workflow_type)
 
         return PSOPListResponse(
@@ -220,16 +251,28 @@ async def get_all_psops(limit: int = 10, workflow_type: str = 'psop', _: Any = D
             count=len(recent_workflows),
             data=[wf.to_dict() for wf in recent_workflows]
         )
+    except anyio.WouldBlock as e:
+        logger.error(f"Server is busy: {str(e)}")
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=f"Server is busy: {str(e)}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取PSOP列表失败: {str(e)}")
+    finally:
+        if acquired:
+            all_psop_semaphore.release()
+
+
+one_psop_semaphore = anyio.Semaphore(int(config.get(FLOW_CTL_PARALLEL_ONE_PSOP)))
 
 
 @app.get("/psops/{workflow_id}", response_model=PSOPDetailResponse)
-async def get_psop_by_id(workflow_id: str, _: Any = Depends(RateLimiter("get_psop_by_id"))):
+async def get_psop_by_id(workflow_id: str, _: Any = Depends(RateLimiter(config, "get_psop_by_id"))):
     """
     根据ID获取PSOP工作流详情
     """
+    acquired = False
     try:
+        one_psop_semaphore.acquire_nowait()
+        acquired = True
         psop = retrieval.get_psop_by_id(workflow_id)
         if not psop:
             raise HTTPException(status_code=404, detail=f"未找到ID为 {workflow_id} 的PSOP")
@@ -238,18 +281,30 @@ async def get_psop_by_id(workflow_id: str, _: Any = Depends(RateLimiter("get_pso
             status="success",
             data=psop.model_dump()
         )
+    except anyio.WouldBlock as e:
+        logger.error(f"Server is busy: {str(e)}")
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=f"Server is busy: {str(e)}")
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取PSOP详情失败: {str(e)}")
+    finally:
+        if acquired:
+            one_psop_semaphore.release()
+
+
+save_psop_semaphore = anyio.Semaphore(int(config.get(FLOW_CTL_PARALLEL_SAVE_PSOP)))
 
 
 @app.post("/psops", status_code=201)
-async def save_psop(request: SavePSOPRequest, _: Any = Depends(RateLimiter("save_psop"))):
+async def save_psop(request: SavePSOPRequest, _: Any = Depends(RateLimiter(config, "save_psop"))):
     """
     保存PSOP工作流
     """
+    acquired = False
     try:
+        save_psop_semaphore.acquire_nowait()
+        acquired = True
         psop = PSOP.model_validate(request.psop)
         saved_id = storage.save_psop(psop)
 
@@ -261,16 +316,28 @@ async def save_psop(request: SavePSOPRequest, _: Any = Depends(RateLimiter("save
                 "workflow_id": saved_id
             }
         )
+    except anyio.WouldBlock as e:
+        logger.error(f"Server is busy: {str(e)}")
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=f"Server is busy: {str(e)}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"保存PSOP失败: {str(e)}")
+    finally:
+        if acquired:
+            save_psop_semaphore.release()
+
+
+delete_psop_semaphore = anyio.Semaphore(int(config.get(FLOW_CTL_PARALLEL_DELETE_PSOP)))
 
 
 @app.delete("/psops/{workflow_id}", response_model=PSOPDeleteResponse)
-async def delete_psop(workflow_id: str,  _: Any = Depends(RateLimiter("delete_psop"))):
+async def delete_psop(workflow_id: str, _: Any = Depends(RateLimiter(config, "delete_psop"))):
     """
     删除指定ID的PSOP工作流
     """
+    acquired = False
     try:
+        delete_psop_semaphore.acquire_nowait()
+        acquired = True
         # 先检查PSOP是否存在
         psop = retrieval.get_psop_by_id(workflow_id)
         if not psop:
@@ -285,18 +352,30 @@ async def delete_psop(workflow_id: str,  _: Any = Depends(RateLimiter("delete_ps
             status="success",
             message=f"PSOP {workflow_id} 删除成功"
         )
+    except anyio.WouldBlock as e:
+        logger.error(f"Server is busy: {str(e)}")
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=f"Server is busy: {str(e)}")
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"删除PSOP失败: {str(e)}")
+    finally:
+        if acquired:
+            delete_psop_semaphore.release()
+
+
+agent_cards_semaphore = anyio.Semaphore(int(config.get(FLOW_CTL_PARALLEL_AGENT_CARDS)))
 
 
 @app.get("/agent-cards", response_model=AgentCardResponse)
-async def get_all_agent_cards(_: Any = Depends(RateLimiter("get_all_agent_cards"))):
+async def get_all_agent_cards(_: Any = Depends(RateLimiter(config, "get_all_agent_cards"))):
     """
     获取全量AgentCard列表
     """
+    acquired = False
     try:
+        agent_cards_semaphore.acquire_nowait()
+        acquired = True
         # 获取所有AgentCard
         agent_cards = agent_lib.get_all_agent_cards()
 
@@ -308,20 +387,33 @@ async def get_all_agent_cards(_: Any = Depends(RateLimiter("get_all_agent_cards"
             count=len(agent_cards_data),
             data=agent_cards_data
         )
+    except anyio.WouldBlock as e:
+        logger.error(f"Server is busy: {str(e)}")
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=f"Server is busy: {str(e)}")
     except FileNotFoundError as e:
         raise HTTPException(status_code=404, detail=f"配置文件不存在: {str(e)}")
     except ValueError as e:
         raise HTTPException(status_code=400, detail=f"数据格式错误: {str(e)}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"获取AgentCard失败: {str(e)}")
+    finally:
+        if acquired:
+            agent_cards_semaphore.release()
+
+
+generate_semaphore = anyio.Semaphore(int(config.get(FLOW_CTL_PARALLEL_GENERATE_PSOP)))
 
 
 @app.post("/generate-from-intent", response_model=IntentResponse)
-async def generate_psop_from_intent(request: IntentRequest, _: Any = Depends(RateLimiter("generate_psop_from_intent"))):
+async def generate_psop_from_intent(request: IntentRequest,
+                                    _: Any = Depends(RateLimiter(config, "generate_psop_from_intent"))):
     """
     根据自然语言意图生成PSOP工作流
     """
+    acquired = False
     try:
+        generate_semaphore.acquire_nowait()
+        acquired = True
         # 获取AgentCards
         agent_cards = agent_lib.get_all_agent_cards()
         if not agent_cards:
@@ -346,19 +438,32 @@ async def generate_psop_from_intent(request: IntentRequest, _: Any = Depends(Rat
             message="PSOP生成成功",
             data=psop.model_dump()
         )
+    except anyio.WouldBlock as e:
+        logger.error(f"Server is busy: {str(e)}")
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=f"Server is busy: {str(e)}")
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"根据意图生成PSOP失败: {e}")
         raise HTTPException(status_code=500, detail=f"生成PSOP失败: {str(e)}")
+    finally:
+        if acquired:
+            generate_semaphore.release()
+
+
+retrieve_semaphore = anyio.Semaphore(int(config.get(FLOW_CTL_PARALLEL_RETRIEVE_PSOP)))
 
 
 @app.post("/retrieve-by-intent", response_model=RetrieveIntentResponse)
-async def retrieve_psop_by_intent(request: RetrieveIntentRequest, _: Any = Depends(RateLimiter("retrieve_psop_by_intent"))):
+async def retrieve_psop_by_intent(request: RetrieveIntentRequest,
+                                  _: Any = Depends(RateLimiter(config, "retrieve_psop_by_intent"))):
     """
     根据自然语言意图检索最合适的PSOP工作流
     """
+    acquired = False
     try:
+        retrieve_semaphore.acquire_nowait()
+        acquired = True
         logger.info(f"开始根据意图检索PSOP: {request.user_intent}")
 
         # 使用WorkflowRetrieval的retrieve_psop_by_intent方法
@@ -378,9 +483,15 @@ async def retrieve_psop_by_intent(request: RetrieveIntentRequest, _: Any = Depen
             message="PSOP检索成功",
             data=psop.model_dump()
         )
+    except anyio.WouldBlock as e:
+        logger.error(f"Server is busy: {str(e)}")
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=f"Server is busy: {str(e)}")
     except Exception as e:
         logger.error(f"根据意图检索PSOP失败: {e}")
         raise HTTPException(status_code=500, detail=f"检索PSOP失败: {str(e)}")
+    finally:
+        if acquired:
+            retrieve_semaphore.release()
 
 
 @app.get("/rest/start_process_stream")

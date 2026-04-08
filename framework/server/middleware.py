@@ -109,8 +109,7 @@ async def async_hit(rate_item, *identifiers: str, cost=1):
 
 
 class RateLimiter:
-    def __init__(self, interface_name: str = None):
-        config = get_conf()
+    def __init__(self, config, interface_name: str = None):
         self.rate_item = parser_rate_lime(interface_name, config)
         if not self.rate_item:
             raise ValueError("Invalid rate limit configuration")
