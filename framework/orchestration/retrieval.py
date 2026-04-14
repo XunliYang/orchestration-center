@@ -18,7 +18,7 @@ import re
 from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any
 
-from framework.llm import get_llm_instance
+from common.llm import get_llm_instance
 from framework.orchestration.model.preflow import PreFlow
 from framework.orchestration.model.psop import PSOP
 from framework.orchestration.persistence import WorkflowStorage
