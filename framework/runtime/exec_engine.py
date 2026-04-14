@@ -22,7 +22,7 @@ from a2a.types import TransportProtocol
 from a2a.utils import get_message_text
 from loguru import logger
 
-from framework.llm import get_llm_instance
+from common.llm import get_llm_instance
 from framework.orchestration.model.psop import PSOP, Step, TaskStatus
 
 
