@@ -153,7 +153,7 @@ def main():
     is_https = server_config.get("enable_https", True)
     is_enable_https = str(is_https).lower() == 'true'
     if not is_enable_https:
-        uvicorn.run(app, host=server_config.get('ip', ""), port=int(server_config.get('port', 60000)))
+        uvicorn.run(app, host=server_config.get('ip', "127.0.0.1"), port=int(server_config.get('port', 60000)))
     else:
         try:
             conf_obj = conf_singleton_obj
