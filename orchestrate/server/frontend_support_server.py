@@ -38,6 +38,7 @@ from common.config import MAX_URL_LENGTH, MAX_REQUEST_BODY_SIZE, CONN_MAX, CONN_
     FLOW_CTL_PARALLEL_PLAN, FLOW_CTL_PARALLEL_PARSE_PDF
 from common.custom.default_handle import HandlerRegistry
 from common.custom.interface_type import InterfaceType
+from common.log.audit_logger import audit_logger, OperationObject, OperationName, LogLevel, OperationResult
 from common.util.config_util import get_conf
 from orchestrate.core.model.preflow import PreFlow
 from orchestrate.core.model.psop import PSOP
@@ -48,6 +49,7 @@ from orchestrate.server.middleware import ConnectionLimitMiddleware, TimeoutMidd
 from orchestrate.solution_package.parse_flow import SolutionPackageParser
 from orchestrate.runtime.exec_engine import DynamicWorkflowEngine
 from orchestrate.registry_client.client_factory import AgentRegistryClientFactory
+from orchestrate.start import get_user_info_from_env
 from orchestrate.workflow_storage_instance import get_workflow_storage
 
 # 创建FastAPI应用
@@ -233,7 +235,13 @@ async def plan(request: PlanRequest, _: Any = Depends(RateLimiter(config, "plan"
             [Parse(json.dumps(card), AgentCard()) for card in request.agent_cards]
         )
         save_handle.handle(workflow)
-
+        audit_logger.audit({
+            'object_name': OperationObject.PSOP,
+            'operation_name': OperationName.SAVE_PSOP,
+            'level': LogLevel.MINOR,
+            'result': OperationResult.SUCCESS,
+            'details': workflow.model_dump(),
+        })
         return PlanResponse(
             status="success",
             data=workflow.model_dump_json()
@@ -242,6 +250,13 @@ async def plan(request: PlanRequest, _: Any = Depends(RateLimiter(config, "plan"
         logger.error(f"Server is busy: {str(e)}")
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=f"Server is busy: {str(e)}")
     except Exception as e:
+        audit_logger.audit({
+            'object_name': OperationObject.PSOP,
+            'operation_name': OperationName.SAVE_PSOP,
+            'level': LogLevel.MINOR,
+            'result': OperationResult.FAILURE,
+            'details': {"message": "规划psop失败"},
+        })
         raise HTTPException(status_code=500, detail=f"规划失败 : {str(e)}")
     finally:
         if acquired:
@@ -324,7 +339,13 @@ async def save_psop(request: SavePSOPRequest, _: Any = Depends(RateLimiter(confi
         acquired = True
         psop = PSOP.model_validate(request.psop)
         saved_id = save_handle.handle(psop)
-
+        audit_logger.audit({
+            'object_name': OperationObject.PSOP,
+            'operation_name': OperationName.SAVE_PSOP,
+            'level': LogLevel.MINOR,
+            'result': OperationResult.SUCCESS,
+            'details': psop.model_dump(),
+        })
         return JSONResponse(
             status_code=201,
             content={
@@ -337,6 +358,13 @@ async def save_psop(request: SavePSOPRequest, _: Any = Depends(RateLimiter(confi
         logger.error(f"Server is busy: {str(e)}")
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=f"Server is busy: {str(e)}")
     except Exception as e:
+        audit_logger.audit({
+            'object_name': OperationObject.PSOP,
+            'operation_name': OperationName.SAVE_PSOP,
+            'level': LogLevel.MINOR,
+            'result': OperationResult.FAILURE,
+            'details': {"message": "保存PSOP失败"},
+        })
         raise HTTPException(status_code=500, detail=f"保存PSOP失败: {str(e)}")
     finally:
         if acquired:
@@ -446,9 +474,22 @@ async def generate_psop_from_intent(request: IntentRequest,
         # 可选：自动保存生成的PSOP
         try:
             save_handle.handle(psop)
+            audit_logger.audit({
+                'object_name': OperationObject.PSOP,
+                'operation_name': OperationName.SAVE_PSOP,
+                'level': LogLevel.MINOR,
+                'result': OperationResult.SUCCESS,
+                'details': psop.model_dump(),
+            })
         except Exception as save_error:
             logger.warning(f"PSOP save failed (does not affect response): {save_error}")
-
+            audit_logger.audit({
+                'object_name': OperationObject.PSOP,
+                'operation_name': OperationName.SAVE_PSOP,
+                'level': LogLevel.MINOR,
+                'result': OperationResult.FAILURE,
+                'details': {"message": "保存PSOP失败"},
+            })
         return IntentResponse(
             status="success",
             message="PSOP生成成功",
