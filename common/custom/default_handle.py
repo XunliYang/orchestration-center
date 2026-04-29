@@ -62,7 +62,7 @@ class GetPsopHandler(BaseHandler):
 
 
 class DeletePsopHandler(BaseHandler):
-    async def handle(self, *args, **kwargs):
+    def handle(self, *args, **kwargs):
         return get_workflow_storage().delete_psop(*args)
 
 

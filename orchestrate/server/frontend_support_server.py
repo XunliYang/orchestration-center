@@ -283,7 +283,7 @@ async def plan(request: PlanRequest, _: Any = Depends(RateLimiter(config, "plan"
             'operation_name': OperationName.SAVE_PSOP,
             'level': LogLevel.MINOR,
             'result': OperationResult.SUCCESS,
-            'details': workflow.model_dump(),
+            'details': workflow.model_dump(mode='json'),
         })
         return PlanResponse(
             status="success",
@@ -398,7 +398,7 @@ async def save_psop(request: SavePSOPRequest, _: Any = Depends(RateLimiter(confi
             'operation_name': OperationName.SAVE_PSOP,
             'level': LogLevel.MINOR,
             'result': OperationResult.SUCCESS,
-            'details': psop.model_dump(),
+            'details': psop.model_dump(mode='json'),
         })
         return JSONResponse(
             status_code=201,
@@ -563,7 +563,7 @@ async def generate_psop_from_intent(request: IntentRequest,
                 'operation_name': OperationName.SAVE_PSOP,
                 'level': LogLevel.MINOR,
                 'result': OperationResult.SUCCESS,
-                'details': psop.model_dump(),
+                'details': psop.model_dump(mode='json'),
             })
         except Exception as save_error:
             logger.warning(f"PSOP auto-save failed (does not affect response): {save_error}")
