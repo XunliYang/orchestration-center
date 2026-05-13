@@ -83,6 +83,7 @@ def _extract_certificate_info(cert: x509.Certificate) -> CertObj:
     obj = CertObj.from_dict(info)
     return obj
 
+
 def parse_crl_list(cert_path: str) -> x509.CertificateRevocationList:
     try:
         with open(cert_path, 'rb') as f:

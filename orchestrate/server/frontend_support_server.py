@@ -16,6 +16,7 @@
 import os
 import tempfile
 import json
+import re
 import asyncio
 import threading
 import queue
@@ -35,11 +36,11 @@ from starlette import status
 from starlette.responses import Response
 
 from common.config import (
-    MAX_URL_LENGTH, MAX_REQUEST_BODY_SIZE, CONN_MAX, CONN_TIMEOUT,
+    MAX_URL_LENGTH, MAX_REQUEST_BODY_SIZE, MAX_FILE_SIZE_BYTES, CONN_MAX, CONN_TIMEOUT,
     FLOW_CTL_PARALLEL_RETRIEVE_PSOP, FLOW_CTL_PARALLEL_GENERATE_PSOP,
     FLOW_CTL_PARALLEL_AGENT_CARDS, FLOW_CTL_PARALLEL_DELETE_PSOP,
     FLOW_CTL_PARALLEL_SAVE_PSOP, FLOW_CTL_PARALLEL_ONE_PSOP,
-    FLOW_CTL_PARALLEL_ALL_PSOPS, FLOW_CTL_PARALLEL_PLAN, FLOW_CTL_PARALLEL_PARSE_PDF,
+    FLOW_CTL_PARALLEL_ALL_PSOPS, FLOW_CTL_PARALLEL_PLAN, FLOW_CTL_PARALLEL_PARSE_PDF
 )
 from common.custom.default_handle import HandlerRegistry
 from common.custom.interface_type import InterfaceType
@@ -57,9 +58,10 @@ from orchestrate.registry_client.client_factory import AgentRegistryClientFactor
 from orchestrate.workflow_storage_instance import get_workflow_storage
 
 # Create FastAPI application
-app = FastAPI(title="Workflow Orchestration API", version="1.0.0")
+app = FastAPI(title="Workflow Orchestration API", version="1.0.0",docs_url=None, redoc_url=None, openapi_url=None)
 
-# Configure CORS
+config = get_conf()
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -67,7 +69,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-config = get_conf()
 
 app.add_middleware(ConnectionLimitMiddleware, max_connections=int(config.get(CONN_MAX)))
 
@@ -213,15 +214,32 @@ async def parse_pdf(file: UploadFile = File(...), _: Any = Depends(RateLimiter(c
         logger.info(f"Parsing PDF file: {filename}, size: {file.size or 'unknown'}")
 
         # Validate file type
-        if not file.filename or not file.filename.lower().endswith('.pdf'):
+        if not file.filename:
             logger.warning(f"Invalid file type: {file.filename}")
-            raise HTTPException(status_code=400, detail="Only PDF files are supported")
+            raise HTTPException(status_code=400, detail="Filename is required")
+        # Validate filename
+        if not re.fullmatch(r"^[\w\-. ]{1,128}\.pdf$", file.filename):
+            logger.warning(f"Invalid file type: {file.filename}")
+            raise HTTPException(status_code=400, detail="Filename must be at most 128 characters, end with .pdf, and contain only letters, digits, hyphens, underscores, dots or spaces")
 
         # Save temporary file
         with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp:
-            content = await file.read()
-            tmp.write(content)
             tmp_file_path = tmp.name
+            content = await file.read()
+
+        # Validate file size
+        if len(content) > MAX_FILE_SIZE_BYTES:
+            logger.warning(f"File size exceeds limit: {len(content)} > {MAX_FILE_SIZE_BYTES}")
+            raise HTTPException(status_code=413, detail=f"File size exceeds maximum allowed {MAX_FILE_SIZE_BYTES // (1024*1024)} MB")
+
+        # Validate PDF magic bytes
+        if len(content) < 5 or content[:5] != b'%PDF-':
+            logger.warning("Uploaded file is not a valid PDF (missing magic bytes)")
+            raise HTTPException(status_code=400, detail="File is not a valid PDF (missing %PDF- header)")
+
+        # Write validated content to temp file
+        with open(tmp_file_path, 'wb') as f:
+            f.write(content)
 
         parser = SolutionPackageParser()
         pre_md = parser.parse_pdf_chapter(
@@ -283,7 +301,7 @@ async def plan(request: PlanRequest, _: Any = Depends(RateLimiter(config, "plan"
             'operation_name': OperationName.SAVE_PSOP,
             'level': LogLevel.MINOR,
             'result': OperationResult.SUCCESS,
-            'details': workflow.model_dump(mode='json'),
+            'details': {"id": workflow.id, "name": workflow.name, "steps_count": len(workflow.steps)},
         })
         return PlanResponse(
             status="success",
@@ -398,7 +416,7 @@ async def save_psop(request: SavePSOPRequest, _: Any = Depends(RateLimiter(confi
             'operation_name': OperationName.SAVE_PSOP,
             'level': LogLevel.MINOR,
             'result': OperationResult.SUCCESS,
-            'details': psop.model_dump(mode='json'),
+            'details': {"id": psop.id, "name": psop.name, "steps_count": len(psop.steps)},
         })
         return JSONResponse(
             status_code=201,
@@ -563,7 +581,7 @@ async def generate_psop_from_intent(request: IntentRequest,
                 'operation_name': OperationName.SAVE_PSOP,
                 'level': LogLevel.MINOR,
                 'result': OperationResult.SUCCESS,
-                'details': psop.model_dump(mode='json'),
+                'details': {"id": psop.id, "name": psop.name, "steps_count": len(psop.steps)},
             })
         except Exception as save_error:
             logger.warning(f"PSOP auto-save failed (does not affect response): {save_error}")

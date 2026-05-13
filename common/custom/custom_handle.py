@@ -34,4 +34,4 @@ class CustomGetAllPsopsPsopHandler(BaseHandler):
 
 class CustomGetPsopPsopHandler(BaseHandler):
     def handle(self, *args, **kwargs):
-       return get_psop_by_id(*args)
+        return get_psop_by_id(*args)

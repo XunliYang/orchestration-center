@@ -15,10 +15,21 @@
 
 import json
 import os.path
+import re
 
 import psycopg2
 from loguru import logger
+from psycopg2 import sql
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
+
+
+DATABASE_NAME_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,62}$")
+
+
+def validate_database_name(name: str) -> str:
+    if not DATABASE_NAME_PATTERN.fullmatch(name):
+        raise ValueError(f"Invalid database name: '{name}'. Must match ^[A-Za-z_][A-Za-z0-9_]{0,62}$")
+    return name
 
 
 def read_db_config(file_name):
@@ -31,6 +42,7 @@ def read_db_config(file_name):
 
 
 conn_info = read_db_config("db_config.json")
+validate_database_name(conn_info.get('database', "orchestration_center"))
 
 
 def create_database_if_not_exists():
@@ -40,15 +52,21 @@ def create_database_if_not_exists():
         conn.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
         cursor = conn.cursor()
 
-        # Check if the database exists
-        database_name = conn_info.get('database', "orchestration-center")
-        cursor.execute(f"SELECT 1 FROM pg_database WHERE datname = '{database_name}'")
+        database_name = conn_info.get('database', "orchestration_center")
+        cursor.execute(
+            sql.SQL("SELECT 1 FROM pg_database WHERE datname = {}").format(
+                sql.Identifier(database_name)
+            )
+        )
         exists = cursor.fetchone()
 
         if not exists:
-            # Create the database
-            cursor.execute(f'CREATE DATABASE {database_name}')
-            print(f"Database {database_name} created successfully")
+            cursor.execute(
+                sql.SQL("CREATE DATABASE {}").format(
+                    sql.Identifier(database_name)
+                )
+            )
+            logger.info(f"Database {database_name} created successfully")
 
         cursor.close()
         conn.close()
