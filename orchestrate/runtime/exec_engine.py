@@ -375,7 +375,7 @@ class DynamicWorkflowEngine:
     def _build_context_for_step(self, step: Step) -> str:
         if step.layer <= 0:
             return ""
-        parts = ["## 前置步骤执行结果\n"]
+        parts = ["## Previous Step Execution Results\n"]
         if step.context_from and "*" in step.context_from:
             ref_pairs = [(name, results) for name, results in self.step_outputs.items()]
         elif step.context_from:
@@ -386,29 +386,29 @@ class DynamicWorkflowEngine:
             ref_pairs = [(name, self.step_outputs[name])
                          for name in predecessor_names if name in self.step_outputs]
         for ref_step_name, ref_results in ref_pairs:
-            parts.append(f"### {ref_step_name} 结果")
+            parts.append(f"### {ref_step_name} Results")
             for task_desc, output in ref_results.items():
                 text = output if isinstance(output, str) else str(output)
-                parts.append(f"**输入(任务)**: {task_desc}")
-                parts.append(f"**输出(结果)**: {text}")
+                parts.append(f"**Input (Task)**: {task_desc}")
+                parts.append(f"**Output (Result)**: {text}")
                 parts.append("")
         return "\n".join(parts).strip()
 
     @staticmethod
     def _build_task_message(task: Task, context_message: str) -> str:
         if context_message:
-            return f"{context_message}\n\n## 当前任务\n{task.description}"
+            return f"{context_message}\n\n## Current Task\n{task.description}"
         return task.description
 
     def _llm_route_decision(self, current_step: Step, task_result: Dict[str, Any]) -> str:
         results_context = []
         for skill, res in task_result.items():
             if isinstance(res, dict) and "error" in res:
-                results_context.append(f"[{skill}]: 执行失败 - {res['error']}")
+                results_context.append(f"[{skill}]: Execution failed - {res['error']}")
             else:
                 text_res = res if isinstance(res, str) else str(res)
                 text_res = text_res[:500] if len(text_res) > 500 else text_res
-                results_context.append(f"[{skill}]:执行成功 - 输出摘要：{text_res}")
+                results_context.append(f"[{skill}]: Execution succeeded - Output summary: {text_res}")
         results_text = "\n".join(results_context)
         next_conditions = json.dumps(
             [{"step": c.step, "condition": c.condition} for c in (current_step.next or [])],
@@ -417,30 +417,31 @@ class DynamicWorkflowEngine:
         )
         prompt_template = f"""
 # Role
-你是一个工作流逻辑控制器。你的任务是根据【任务执行结果】和【预设条件】，决定工作流的下一步走向。
+You are a workflow logic controller. Your task is to determine the next step of the
+workflow based on the task execution results and predefined conditions.
 
-# Current context
-当前步骤： {current_step.name}
-步骤类型： {current_step.type.value}
+# Current Context
+Current step: {current_step.name}
+Step type: {current_step.type.value}
 
-# Execution Result (Previous Step Output)
+# Execution Results (Previous Step Output)
 {results_text}
 
 # Next Conditions (Required for Transition)
 {next_conditions}
 
 # Decision Logic
-1. 分析上述【Execution Results】。
-2. 检查是否满足任意一条【Next Conditions】中的'condition' 描述。
-    - 如果'condition'是"xx成功"，请检查结果中是否有 xx 成功的证据。
-    - 如果'condition'为空字符串('""')，通常表示无条件跳转至下一个step。
-3. 如果满足条件，输出对应的目标'step'名称。
-4. 如果不满足条件，或者任务执行中出现了'error'，输出"end"。
-5. 如果结果模糊不清但看似成功，输出"retry"表示需要人工介入或重试。
+1. Analyze the Execution Results above.
+2. Check whether any of the Next Conditions' "condition" descriptions are satisfied.
+   - If a condition says e.g. "xx succeeded", check the results for evidence that xx succeeded.
+   - An empty condition ('""') typically means unconditional transition to the next step.
+3. If a condition is met, output the corresponding target step name.
+4. If no condition is met, or the task execution contains an error, output "end".
+5. If the result is ambiguous but appears successful, output "retry" to request manual intervention.
 
 # Output Format
-- 仅输出一个单词或短语：目标 Step 名称（如 "step2"）,"end", 或"retry"。
-- 不要输出任何解释、标点符号或其他字符。
+- Output exactly one word or phrase: the target step name (e.g. "step2"), "end", or "retry".
+- Do NOT output any explanation, punctuation, or other characters.
 """
         if not self.llm_client:
             raise ValueError("LLM Client not initialized. Please set engine.llm_client.")

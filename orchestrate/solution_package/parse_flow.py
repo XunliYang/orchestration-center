@@ -79,20 +79,19 @@ class SolutionPackageParser:
     def build_markdown_prompt(chapter_text: str) -> str:
         """Build LLM prompt for converting PDF text to markdown format."""
         return f"""
-请将以下 PDF 章节文本转换为规范的 Markdown 格式。要求：
-1. 保持原文的层级结构，使用适当的标题标记(# ## ###等)
-2. 识别并格式化：
-    - 章节标题用 # 或 ## 标记
-    - 列表项用 - 或 1. 标记
-    - 表格转化为 Markdown 表格格式
-3. 保留所有原文内容，不要删减
-保持段落结构，用空行分隔不同段落
-如果遇到图表，用[图表：描述]的形式标注
-忽略页眉页脚，如文档标题、版权信息、页码标记、公司 logo 或品牌文字
-只输出转换后的 格式文本，不要有其他内容。
-请输出翻译后的中文。注意将"Agent"翻译为智能体。
+Convert the following PDF chapter text into standard Markdown format. Requirements:
+1. Preserve the original heading hierarchy using appropriate heading markers (# ## ### etc.)
+2. Identify and format:
+    - Chapter/section titles with # or ## markers
+    - List items with - or 1. markers
+    - Tables as Markdown table format
+3. Keep all original content; do not omit or truncate.
+4. Preserve paragraph structure; separate paragraphs with blank lines.
+5. If encountering figures or charts, annotate as [Figure: description].
+6. Ignore headers/footers such as document title, copyright, page numbers, company logos, or branding text.
+7. Output only the converted Markdown; do not include any other text.
 
-以下是需要转换的文本内容：
+The text to convert is below:
 {chapter_text}
 """
 
@@ -100,7 +99,7 @@ class SolutionPackageParser:
         """Extract text for a specific chapter from PDF."""
         path = Path(pdf_path)
         if not path.exists():
-            raise PDFParsingError(f'PDF file does not exist： {pdf_path}')
+            raise PDFParsingError(f'PDF file does not exist: {pdf_path}')
         try:
             doc = fitz.open(pdf_path)
         except Exception as e:
@@ -117,7 +116,7 @@ class SolutionPackageParser:
         """Extract all level-1 chapters from PDF as a dictionary."""
         path = Path(pdf_path)
         if not path.exists():
-            raise PDFParsingError(f'PDF file does not exist： {pdf_path}')
+            raise PDFParsingError(f'PDF file does not exist: {pdf_path}')
 
         try:
             doc = fitz.open(pdf_path)

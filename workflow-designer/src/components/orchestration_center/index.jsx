@@ -395,10 +395,10 @@ const OrchestrationCenter = ({ isDark }) => {
                             <UnifiedWorkflow
                                 mode={activeView === 'detail' ? 'view' : 'edit'}
                                 isDark={isDark}
-                                // View 模式使用的 Props
+                                // Props for View mode
                                 nodes={nodes}
                                 edges={edges}
-                                // Edit 模式使用的 Props
+                                // Props for Edit mode
                                 importedNodes={nodes}
                                 importedEdges={edges}
                                 workflowId={selectedId}
@@ -540,7 +540,7 @@ const OrchestrationCenter = ({ isDark }) => {
                 accept=".pdf"
                 onChange={handleFileChange} />
 
-            {/* 删除确认弹窗 */}
+            {/* Delete confirmation dialog */}
             {showDeleteConfirm && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center bg-zinc-950/20 backdrop-blur-sm animate-in fade-in duration-300">
                     <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[2.5rem] p-8 shadow-2xl w-full max-w-md scale-in-center animate-in zoom-in-95 duration-300">
