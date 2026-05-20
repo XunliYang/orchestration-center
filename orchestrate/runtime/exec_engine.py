@@ -19,22 +19,19 @@ from typing import Dict, Any, Optional, Callable
 
 import httpx
 from a2a.client import ClientConfig, ClientFactory
-from a2a.helpers import get_message_text, new_text_message
+from a2a.helpers import new_text_message
 from a2a.types import SendMessageRequest
 from google.protobuf.json_format import MessageToJson, MessageToDict
 from loguru import logger
 
 from a2a_t.client import A2ATClient
-from a2a_t.negotiation.common.models import NegotiationContext
 from common.llm import get_llm_instance
-from orchestrate.core.model.psop import PSOP, Step, TaskStatus
+from orchestrate.core.model.psop import PSOP, Step, Task, TaskStatus
 from samples.a2at_config import get_a2at_env_path
 from samples.negotiation_utils import (
     extract_negotiation_context_from_task_metadata,
     log_negotiation_context,
 )
-from orchestrate.core.model.psop import PSOP, Step, Task, TaskStatus
-
 
 class DynamicWorkflowEngine:
     def __init__(self, psop: PSOP, agent_cards, a2at_env_path: Path = None):
