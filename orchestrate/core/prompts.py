@@ -29,91 +29,91 @@ The prompts are used by LLM to:
 
 PSOP_EXAMPLE = """
 {
-    "name" : "基站批量掉站故障诊断与恢复",
-    "steps":[
+    "name": "Server Outage Diagnosis and Recovery",
+    "steps": [
         {
-            "name":"step1",
-            "type":"AllSuccess",
-            "subtasks"[
+            "name": "step1",
+            "type": "AllSuccess",
+            "subtasks": [
                 {
-                    "description":"检查退服基站的动力环境故障",
-                    "agent":"MAE故障Agent",
-                    "skill":"检查基站动力环境故障",
+                    "description": "Check power and environment status of affected servers",
+                    "agent": "Fault Agent",
+                    "skill": "check-server-power-env"
                 },
                 {
-                    "description":"检查退服基站的软硬件故障",
-                    "agent":"MAE故障Agent",
-                    "skill":"检查基站软硬件故障",
-                },
+                    "description": "Check hardware and software error logs",
+                    "agent": "Fault Agent",
+                    "skill": "check-server-hw-sw-faults"
+                }
             ],
-            "next":[
+            "next": [
                 {
-                    "step:"step2",
-                    "condition":"基站侧未发现明显问题"
+                    "step": "step2",
+                    "condition": "No server-side issue found"
                 },
                 {
-                    "step:"step3",
-                    "condition":"基站侧发现故障原因"
+                    "step": "step3",
+                    "condition": "Server-side root cause identified"
                 }
             ]
         },
         {
-            "name":"step2",
-            "type":"AllSuccess",
-            "subtasks"[
+            "name": "step2",
+            "type": "AllSuccess",
+            "subtasks": [
                 {
-                    "description":"查询传输网元告警信息",
-                    "agent":"MAE故障Agent",
-                    "skill":"查询传输网元告警",
+                    "description": "Query network element alarm information",
+                    "agent": "Fault Agent",
+                    "skill": "query-network-alarms"
                 },
                 {
-                    "description":"检查传输侧是否存在光缆中断",
-                    "agent":"MAE故障Agent",
-                    "skill":"检查传输侧是否存在光缆中断",
-                },
+                    "description": "Check for backbone fiber cable breaks",
+                    "agent": "Fault Agent",
+                    "skill": "check-fiber-breaks"
+                }
             ],
-            "next":[
+            "next": [
                 {
-                    "step:"step3",
-                    "condition":"传输侧发现异常"
+                    "step": "step3",
+                    "condition": "Network anomaly detected"
                 },
                 {
-                    "step:"step4",
-                    "condition":"传输侧未发现异常"
+                    "step": "step4",
+                    "condition": "No network anomaly detected"
                 }
             ]
         },
         {
-            "name":"step3",
-            "type":"AllSuccess",
-            "subtasks"[
+            "name": "step3",
+            "type": "AllSuccess",
+            "subtasks": [
                 {
-                    "description":"传输侧处理故障",
-                    "agent":"MAE故障Agent",
-                    "skill":"故障处理",
+                    "description": "Handle network-side fault recovery",
+                    "agent": "Fault Agent",
+                    "skill": "fault-recovery"
                 }
             ],
-            "next":[
+            "next": [
                 {
-                    "step:"end",
-                    "condition":"故障处理完成"
+                    "step": "end",
+                    "condition": "Fault recovery completed"
                 }
             ]
         },
         {
-            "name":"step4",
-            "type":"AllSuccess",
-            "subtasks"[
+            "name": "step4",
+            "type": "AllSuccess",
+            "subtasks": [
                 {
-                    "description":"处理无线网络故障",
-                    "agent":"MAE故障Agent",
-                    "skill":"处理无线网络故障",
+                    "description": "Handle application-layer fault recovery",
+                    "agent": "Fault Agent",
+                    "skill": "app-fault-recovery"
                 }
             ],
-            "next":[
+            "next": [
                 {
-                    "step:"end",
-                    "condition":"故障处理完成"
+                    "step": "end",
+                    "condition": "Fault recovery completed"
                 }
             ]
         }
@@ -123,71 +123,83 @@ PSOP_EXAMPLE = """
 
 
 def get_preprocess_input_prompt(pre_wd_md: str) -> str:
-    return f"""提取下面人工处理步骤中，每一步执行的任务
-## 处理步骤
-{pre_wd_md}
-## 输出规则
-1、用一个json列表输出,用'''json'''包裹结果。
-2、结束步骤不需要提取为一个任务。
-3、不用输出其他内容。
+    return f"""Extract the task performed in each of the following process steps.
 
-## 输出示例
+## Process Steps
+{pre_wd_md}
+
+## Output Rules
+1. Output as a JSON list, wrapped in ```json``` markers.
+2. Do NOT extract an end/termination step as a task.
+3. Do NOT output anything other than the JSON list.
+
+## Output Example
 ```json
-["无线侧获取批量掉站基站IP列表","无线排查掉站基站是否存在动环故障",...]
+["Fetch IP list of affected servers", "Check for power or environment faults on servers", "..."]
 ```
 """
 
 
 def get_choose_skill_prompt(actions: str, agents_card: str) -> str:
-    return f"""作为一个资深的无线网络运维专家，请你为下面每一个动作匹配对应的AgentSkill，输出每一个动作对应要使用的技能名称。
-## 智能体技能信息
+    return f"""As a senior IT operations expert, match each action below with the most appropriate AgentSkill.
+For each action, output the skill name that should be used.
+
+## Agent Skill Catalog
 {agents_card}
 
-## 动作
+## Actions
 {actions}
 
-## 注意点
-1、选择的技能的数量，与动作数量保持一致。
-2、如果没有技能可以完成该动作，技能名称填“无”。
+## Important
+1. The number of selected skills must match the number of actions.
+2. If no suitable skill exists for an action, use "none" as the skill name.
 
-## 输出格式
+## Output Format
 ```json
 {{
-    "动作1": "xxx技能",
-    "动作2": "xxx技能",
-    "动作3": "xxx技能",
+    "action1": "some-skill",
+    "action2": "some-skill",
+    "action3": "some-skill"
 }}
 ```"""
 
 
 def get_generate_psop_prompt(preflow: str, tasks: list, psop_scheme: str) -> str:
     return f"""
-你是一个电信网络运维专家，我根据专家提供的人工处理步骤，将每一步安排给专业Agent完成。
-请按照人工处理步骤中的逻辑，帮我识别下Agent任务之间的依赖关系，并输出我们自定义的PSOP格式的工作流。
+You are an IT operations expert. Based on the process steps provided by domain experts,
+assign each step to a specialized Agent and identify dependencies between Agent tasks.
+Output the result in our custom PSOP workflow format.
 
-## 人工处理步骤
+## Process Steps
 {preflow}
 
-## Agent任务
+## Agent Tasks
 {tasks}
 
-## PSOP格式
+## PSOP Format Specification
 {psop_scheme}
 
-## 规划规则
-1、如果任务间不存在明确的依赖，则这些任务可以放到一个step中并行执行。
-2、PSOP中的非必填字段留空，不用进行推理。
-3、最后一步的next属性，无条件走end，next属性值如下： "next":[{{"step":"end, "condition":""}}]
-4、仅输出psop即可，不用输出其他内容。
+## Planning Rules
+1. If tasks have no explicit dependency, place them in the same step for parallel execution.
+2. Leave non-required PSOP fields empty; do not fabricate values.
+3. The final step's "next" should unconditionally go to "end":
+   ```"next":[{{"step":"end", "condition":""}}]```
+4. Output only the PSOP JSON; do not include any other text.
 
-## 跨层编排规则（重要）
-- 如果某个步骤需要综合、总结、分析前面步骤的执行结果，则该步骤属于聚合层。
-- 聚合层步骤需设置 layer=1（执行层默认为0），并设置 context_from 包含所有需要引用结果的步骤名称。
-- context_from 示例：["step1","step2"] 表示将 step1 和 step2 的输出注入到当前步骤 Agent 的上下文中。
-- **推荐**：当存在分支路径（多个步骤都能到达该聚合步骤），使用 context_from: ["*"] 表示自动引用所有已执行步骤的输出，避免遗漏。
-- 如果步骤中的 Agent 只需要独立执行而不依赖其他步骤结果，则不需要设置 context_from。
+## Cross-Layer Orchestration Rules (Important)
+- If a step needs to synthesize, summarize, or analyze results from preceding steps,
+  classify it as an aggregation layer step.
+- Aggregation steps must set layer=1 (execution layer defaults to 0) and include
+  a context_from list referencing all upstream steps whose output is needed.
+- context_from example: ["step1","step2"] injects the outputs of step1 and step2
+  into the current step's Agent context.
+- **Recommended**: When branching paths exist (multiple steps can reach the aggregation
+  step), use context_from: ["*"] to automatically reference all previously executed
+  step outputs, avoiding omissions.
+- If a step's Agent operates independently without needing other step results,
+  do NOT set context_from.
 
-## 示例输出
+## Example Output
 ```json
 {PSOP_EXAMPLE}
 ```
@@ -195,74 +207,80 @@ def get_generate_psop_prompt(preflow: str, tasks: list, psop_scheme: str) -> str
 
 
 def get_intent_to_psop_prompt(user_intent: str, agent_cards_json: str, psop_schema: str, rag: str = "") -> str:
-    return f"""作为一个资深的电信网络运维专家，请根据用户意图直接生成PSOP（Parallel-Standard Operation Process）工作流。
+    return f"""As a senior IT operations expert, generate a PSOP (Parallel-Standard Operation Process) workflow
+directly from the user's intent.
 
-## 用户意图
+## User Intent
 {user_intent}
 
-## 可用Agent及技能
+## Available Agents and Skills
 {agent_cards_json}
 
-## 规划知识
-{"无" if not rag else rag}
+## Planning Knowledge
+{"none" if not rag else rag}
 
-## PSOP格式要求
+## PSOP Format Specification
 {psop_schema}
 
-## 生成规则
-1. **步骤分解**：将用户意图分解为具体的、可执行的步骤
-2. **技能匹配**：为每个步骤选择合适的Agent和Skill，确保选择的Agent和Skill在可用列表中
-3. **依赖分析**：分析步骤间的依赖关系，确定并行/串行执行逻辑
-4. **条件跳转**：为每个步骤设置合理的跳转条件
-5. **命名规范**：步骤名称使用"step1"、"step2"等格式，每个步骤的type默认为"AllSuccess"
+## Generation Rules
+1. **Step Decomposition**: Decompose the user intent into concrete, executable steps.
+2. **Skill Matching**: Select an appropriate Agent and Skill for each step.
+   Ensure both the Agent and Skill exist in the available catalog.
+3. **Dependency Analysis**: Analyze inter-step dependencies to determine
+   parallel vs. sequential execution.
+4. **Conditional Branching**: Define reasonable transition conditions for each step.
+5. **Naming Convention**: Use "step1", "step2", ... format. Default type is "AllSuccess".
 
-## 跨层编排规则（重要）
-6. **层级划分**：
-   - 执行层 (layer=0)：独立执行分析、数据采集、检查等任务的步骤
-   - 聚合层 (layer=1+)：需要综合、总结、对比前面步骤结果的步骤
-7. **上下文传递**：
-   - 聚合层步骤需设置 context_from 字段，包含其依赖的前置步骤名称列表
-   - context_from 示例：["step1","step2"] 表示将 step1 和 step2 的输出注入到当前步骤的 Agent 上下文中
-   - **推荐**：当存在分支路径（多个步骤都能到达该聚合步骤），使用 context_from: ["*"] 表示自动引用所有已执行步骤的输出
-   - 执行层步骤不需要设置 context_from
-8. **典型场景**：当用户意图包含"总结"、"综合研判"、"根因分析"、"给出最终方案"等需要汇总前序分析的描述时，最后一步应设为聚合层步骤
+## Cross-Layer Orchestration Rules (Important)
+6. **Layer Classification**:
+   - Execution layer (layer=0): Steps that independently perform analysis, data collection, inspection, etc.
+   - Aggregation layer (layer=1+): Steps that synthesize, summarize, or compare results from previous steps.
+7. **Context Passing**:
+   - Aggregation steps must set context_from with the list of upstream step names they depend on.
+   - context_from example: ["step1","step2"] injects step1 and step2 outputs into the current step's Agent context.
+   - **Recommended**: When branching paths exist (multiple steps can reach the aggregation step),
+     use context_from: ["*"] to automatically reference all previously executed step outputs.
+   - Execution layer steps do NOT need context_from.
+8. **Typical Patterns**: When the user intent includes terms like "summarize", "synthesize",
+   "root cause analysis", "generate final recommendations", etc., the final step should
+   be an aggregation layer step.
 
-## 输出格式
-请直接输出完整的PSOP JSON，用```json```包裹。
+## Output Format
+Output the complete PSOP JSON wrapped in ```json``` markers.
 
-## 示例1：普通流程
-用户意图：诊断基站批量掉站故障
+## Example 1: Standard Linear/Branching Workflow
+User Intent: Diagnose a server outage across the data center.
 
-可用Agent及技能：[包含MAE故障Agent等]
+Available Agents and Skills: [Fault Agent with various diagnostic skills]
 
-输出：
+Output:
 ```json
 {{
-    "name": "基站批量掉站故障诊断与恢复",
+    "name": "Server Outage Diagnosis and Recovery",
     "steps": [
         {{
             "name": "step1",
             "type": "AllSuccess",
             "subtasks": [
                 {{
-                    "description": "检查退服基站的动力环境故障",
-                    "agent": "MAE故障Agent",
-                    "skill": "检查基站动力环境故障"
+                    "description": "Check power and environment status of affected servers",
+                    "agent": "Fault Agent",
+                    "skill": "check-server-power-env"
                 }},
                 {{
-                    "description": "检查退服基站的软硬件故障",
-                    "agent": "MAE故障Agent",
-                    "skill": "检查基站软硬件故障"
+                    "description": "Check hardware and software error logs",
+                    "agent": "Fault Agent",
+                    "skill": "check-server-hw-sw-faults"
                 }}
             ],
             "next": [
                 {{
                     "step": "step2",
-                    "condition": "基站侧未发现明显问题"
+                    "condition": "No server-side issue found"
                 }},
                 {{
                     "step": "step3",
-                    "condition": "基站侧发现故障原因"
+                    "condition": "Server-side root cause identified"
                 }}
             ]
         }},
@@ -271,24 +289,24 @@ def get_intent_to_psop_prompt(user_intent: str, agent_cards_json: str, psop_sche
             "type": "AllSuccess",
             "subtasks": [
                 {{
-                    "description": "查询传输网元告警信息",
-                    "agent": "MAE故障Agent",
-                    "skill": "查询传输网元告警"
+                    "description": "Query network element alarm information",
+                    "agent": "Fault Agent",
+                    "skill": "query-network-alarms"
                 }},
                 {{
-                    "description": "检查传输侧是否存在光缆中断",
-                    "agent": "MAE故障Agent",
-                    "skill": "检查传输侧是否存在光缆中断"
+                    "description": "Check for backbone fiber cable breaks",
+                    "agent": "Fault Agent",
+                    "skill": "check-fiber-breaks"
                 }}
             ],
             "next": [
                 {{
                     "step": "step3",
-                    "condition": "传输侧发现异常"
+                    "condition": "Network anomaly detected"
                 }},
                 {{
                     "step": "step4",
-                    "condition": "传输侧未发现异常"
+                    "condition": "No network anomaly detected"
                 }}
             ]
         }},
@@ -297,15 +315,15 @@ def get_intent_to_psop_prompt(user_intent: str, agent_cards_json: str, psop_sche
             "type": "AllSuccess",
             "subtasks": [
                 {{
-                    "description": "传输侧处理故障",
-                    "agent": "MAE故障Agent",
-                    "skill": "故障处理"
+                    "description": "Handle network-side fault recovery",
+                    "agent": "Fault Agent",
+                    "skill": "fault-recovery"
                 }}
             ],
             "next": [
                 {{
                     "step": "end",
-                    "condition": "故障处理完成"
+                    "condition": "Fault recovery completed"
                 }}
             ]
         }},
@@ -314,15 +332,15 @@ def get_intent_to_psop_prompt(user_intent: str, agent_cards_json: str, psop_sche
             "type": "AllSuccess",
             "subtasks": [
                 {{
-                    "description": "处理无线网络故障",
-                    "agent": "MAE故障Agent",
-                    "skill": "处理无线网络故障"
+                    "description": "Handle application-layer fault recovery",
+                    "agent": "Fault Agent",
+                    "skill": "app-fault-recovery"
                 }}
             ],
             "next": [
                 {{
                     "step": "end",
-                    "condition": "故障处理完成"
+                    "condition": "Fault recovery completed"
                 }}
             ]
         }}
@@ -330,15 +348,15 @@ def get_intent_to_psop_prompt(user_intent: str, agent_cards_json: str, psop_sche
 }}
 ```
 
-## 示例2：跨层编排流程（含聚合总结）
-用户意图：排查基站故障并给出综合故障分析报告
+## Example 2: Cross-Layer Workflow with Aggregation
+User Intent: Investigate server failure and produce a comprehensive fault analysis report.
 
-可用Agent及技能：[包含诊断Agent、传输Agent、总结Agent等]
+Available Agents and Skills: [Diagnostic Agent, Network Agent, Analysis Agent]
 
-输出：
+Output:
 ```json
 {{
-    "name": "基站故障排查与综合报告",
+    "name": "Server Fault Investigation and Analysis Report",
     "steps": [
         {{
             "name": "step1",
@@ -346,9 +364,9 @@ def get_intent_to_psop_prompt(user_intent: str, agent_cards_json: str, psop_sche
             "layer": 0,
             "subtasks": [
                 {{
-                    "description": "检查基站动力环境和软硬件状态",
-                    "agent": "MAE故障Agent",
-                    "skill": "故障诊断"
+                    "description": "Check server power, environment, and hardware/software status",
+                    "agent": "Diagnostic Agent",
+                    "skill": "fault-diagnosis"
                 }}
             ],
             "next": [
@@ -364,9 +382,9 @@ def get_intent_to_psop_prompt(user_intent: str, agent_cards_json: str, psop_sche
             "layer": 0,
             "subtasks": [
                 {{
-                    "description": "查询传输网元告警信息",
-                    "agent": "传输Agent",
-                    "skill": "传输告警查询"
+                    "description": "Query network element alarm information",
+                    "agent": "Network Agent",
+                    "skill": "query-alarms"
                 }}
             ],
             "next": [
@@ -383,9 +401,9 @@ def get_intent_to_psop_prompt(user_intent: str, agent_cards_json: str, psop_sche
             "context_from": ["*"],
             "subtasks": [
                 {{
-                    "description": "综合前面所有排查结果，分析故障根因并生成处理建议报告",
-                    "agent": "总结Agent",
-                    "skill": "故障根因分析"
+                    "description": "Synthesize all investigation results, perform root cause analysis, and generate a remediation report",
+                    "agent": "Analysis Agent",
+                    "skill": "root-cause-analysis"
                 }}
             ],
             "next": [
@@ -399,40 +417,42 @@ def get_intent_to_psop_prompt(user_intent: str, agent_cards_json: str, psop_sche
 }}
 ```
 
-## 注意事项
-1. 最后一步的next属性设置为：[{{"step": "end", "condition": ""}}]
-2. 保持电信运维的专业术语和逻辑严谨性
-3. 确保生成的PSOP符合格式要求
-4. 仅输出JSON，不要有其他解释性文字
-5. 根据用户意图判断是否需要跨层编排，如果需要，最后一步应为聚合层步骤并设置适当的 context_from
+## Important Notes
+1. The final step's "next" must be: [{{"step": "end", "condition": ""}}]
+2. Use professional IT operations terminology and rigorous logic.
+3. Ensure the generated PSOP conforms to the format specification.
+4. Output only the JSON; do not include any explanatory text.
+5. Evaluate whether cross-layer orchestration is needed based on the user intent.
+   If needed, the last step should be an aggregation step with appropriate context_from.
 """
 
 
 def get_retrieve_psop_prompt(user_intent: str, psop_list: str) -> str:
-    return f"""作为一个资深的电信网络运维专家，请根据用户意图从现有的PSOP工作流中选择最合适的一个。
+    return f"""As a senior IT operations expert, select the most suitable existing PSOP workflow
+for the given user intent.
 
-## 用户意图
+## User Intent
 {user_intent}
 
-## 可用PSOP工作流列表
+## Available PSOP Workflows
 {psop_list}
 
-## 选择规则
-1. **意图匹配**：分析用户意图与每个PSOP的名称和描述的匹配程度
-2. **功能覆盖**：评估PSOP的功能是否能够满足用户意图的需求
-3. **专业领域**：考虑电信运维的专业领域匹配度
-4. **最佳匹配**：选择最符合用户意图的PSOP工作流
+## Selection Criteria
+1. **Intent Match**: Evaluate how well each PSOP's name and description align with the user intent.
+2. **Functional Coverage**: Assess whether the PSOP's capabilities cover the user's requirements.
+3. **Domain Relevance**: Consider the IT operations domain specialization match.
+4. **Best Fit**: Select the single most appropriate PSOP.
 
-## 输出格式
-请直接输出最匹配的PSOP名称，用```json```包裹。
+## Output Format
+Output only the matched PSOP name, wrapped in ```json``` markers.
 
-## 输出示例
+## Output Example
 ```json
-"基站批量掉站故障诊断与恢复"
+"Server Outage Diagnosis and Recovery"
 ```
 
-## 注意事项
-1. 只输出PSOP名称，不要有其他解释性文字
-2. 如果找不到合适的PSOP，输出空字符串：""
-3. 确保选择的PSOP名称与列表中的名称完全一致
+## Important Notes
+1. Output only the PSOP name; do not include any explanatory text.
+2. If no suitable PSOP is found, output an empty string: "".
+3. Ensure the selected PSOP name matches the list exactly (character for character).
 """

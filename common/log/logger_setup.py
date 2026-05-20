@@ -16,7 +16,6 @@
 import os
 import sys
 import zipfile
-from datetime import timezone, datetime
 
 from loguru import logger
 from pathlib import Path
@@ -32,19 +31,15 @@ LOG_FORMAT = "{time:YYYY-MM-DD HH:mm:ss} - {name} - {level} - {message}"
 
 
 def add_module_logger(module_prefix: str):
-    def compress_and_set_permission(source_file):
-        zip_file = Path(str(source_file) + ".zip")
-
+    def safe_compression(source_file):
         try:
+            zip_file = Path(str(source_file) + ".zip")
             with zipfile.ZipFile(zip_file, "w", zipfile.ZIP_DEFLATED) as zf:
                 zf.write(source_file, arcname=Path(source_file).name)
-
             os.chmod(zip_file, 0o440)
-
-            os.remove(source_file)
             return zip_file
         except Exception as e:
-            logger.error(f"add_module_logger error: {e}")
+            logger.warning(f"Log compression failed (non-fatal): {e}")
             return None
 
     logger.configure(extra={"request_id": ''})
@@ -54,16 +49,12 @@ def add_module_logger(module_prefix: str):
         logger.add(sys.stdout, format=LOG_FORMAT, level="INFO", backtrace=False, colorize=True)
 
         logger.add(
-            _LOG_DIR / f"{module_prefix}_log_{{time:YYYY-MM-DD}}.log",
+            _LOG_DIR / f"{module_prefix}_{{time:YYYY-MM-DD}}_{os.getpid()}.log",
             format=LOG_FORMAT,
             level="INFO",
-            rotation=lambda message, file: (
-                    os.stat(file.name).st_size > 10 * 1024 * 1024
-                    or datetime.now(tz=timezone.utc).date() != datetime.fromtimestamp(
-                os.path.getctime(file.name)).date()
-            ),
+            rotation="10 MB",
             retention="30 days",
-            compression=compress_and_set_permission,
+            compression=safe_compression,
             encoding="utf-8",
             enqueue=True,
         )

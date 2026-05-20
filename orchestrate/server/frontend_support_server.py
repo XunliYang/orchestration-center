@@ -17,12 +17,8 @@ import os
 import tempfile
 import json
 import re
-import asyncio
-import threading
-import queue
 import time
 import uuid
-from datetime import datetime
 from typing import Optional, List, Any, Dict
 
 import anyio
@@ -45,22 +41,20 @@ from common.config import (
 )
 from common.custom.default_handle import HandlerRegistry
 from common.custom.interface_type import InterfaceType
+from orchestrate.server.sse_executor import run_psop_sse
+from orchestrate.server.response_utils import ok, created, get_agent_cards
 from common.log.audit_logger import audit_logger, OperationObject, OperationName, LogLevel, OperationResult
 from common.util.config_util import get_conf
 from orchestrate.core.model.preflow import PreFlow
 from orchestrate.core.model.psop import PSOP
-from orchestrate.core.model.execution_record import ExecutionRecord
-from common.custom.default_handle import HandlerRegistry
-from common.custom.interface_type import InterfaceType
+from orchestrate.server.external_api import router as external_router
 from orchestrate.core.psop_generator import PsopGenerator
 from orchestrate.core.intent_psop_generator import IntentPsopGenerator
 from orchestrate.core.retrieval import WorkflowRetrieval
 from orchestrate.server.middleware import ConnectionLimitMiddleware, TimeoutMiddleware, RateLimiter
 from orchestrate.solution_package.parse_flow import SolutionPackageParser
-from orchestrate.runtime.exec_engine import DynamicWorkflowEngine
 from orchestrate.registry_client.client_factory import AgentRegistryClientFactory
 from orchestrate.workflow_storage_instance import get_workflow_storage
-from samples.a2at_config import get_a2at_env_path
 
 app = FastAPI(title="Workflow Orchestration API", version="1.0.0", docs_url=None, redoc_url=None, openapi_url=None)
 
@@ -132,20 +126,6 @@ retrieval = WorkflowRetrieval(get_workflow_storage())
 # ═══════════════════════════════════════════════════════════════════════════════
 # Standard response envelope
 # ═══════════════════════════════════════════════════════════════════════════════
-
-class ApiResponse(BaseModel):
-    code: int = 200
-    message: str = "success"
-    data: Any = None
-
-
-def ok(data: Any = None, message: str = "success") -> dict:
-    return {"code": 200, "message": message, "status": "success", "data": data}
-
-
-def created(data: Any = None, message: str = "created") -> dict:
-    return {"code": 201, "message": message, "status": "success", "data": data}
-
 
 # ──── Request models ────
 
@@ -432,14 +412,14 @@ async def generate_from_intent(
         logger.info(f"Generating PSOP from intent: {intent_preview}")
 
         agent_registry_factory = AgentRegistryClientFactory()
-        agent_cards = agent_registry_factory.create_from_env().list_exact()
-        if not agent_cards:
+        agent_cards_raw = agent_registry_factory.create_from_env().list_exact()
+        if not agent_cards_raw:
             raise HTTPException(status_code=404, detail="No available AgentCards found")
 
         generator = IntentPsopGenerator()
         psop = generator.generate_psop_from_intent(
             user_intent=request.user_intent,
-            agent_cards=[Parse(json.dumps(agent), AgentCard()) for agent in agent_cards],
+            agent_cards=[Parse(json.dumps(agent), AgentCard()) for agent in agent_cards_raw],
             workflow_name=request.workflow_name
         )
         logger.info(f"PSOP generated from intent: id={psop.id}, steps={len(psop.steps)}")
@@ -549,138 +529,9 @@ async def execute_workflow(
         raise HTTPException(status_code=404, detail=f"Workflow {psop_id} not found")
 
     logger.info(f"Workflow loaded: name={psop.name}, steps={len(psop.steps)}")
-    agent_registry_factory = AgentRegistryClientFactory()
-    all_agent_cards = agent_registry_factory.create_from_env().list_exact()
-    agent_cards = [Parse(json.dumps(agent), AgentCard()) for agent in all_agent_cards]
-    if not agent_cards:
-        raise HTTPException(status_code=404, detail="No available AgentCards found")
+    agent_cards = get_agent_cards()
 
-    async def event_generator():
-        event_queue = queue.Queue()
-        collected_events = []
-        started_at = datetime.now()
-
-        def push_callback(event_type: str, data: dict):
-            try:
-                serializable_data = {}
-                for key, value in data.items():
-                    if hasattr(value, 'model_dump'):
-                        serializable_data[key] = value.model_dump()
-                    elif hasattr(value, '__dict__'):
-                        try:
-                            serializable_data[key] = value.__dict__
-                        except Exception:
-                            serializable_data[key] = str(value)
-                    elif isinstance(value, (tuple, list)):
-                        serializable_data[key] = []
-                        for item in value:
-                            if hasattr(item, 'model_dump'):
-                                serializable_data[key].append(item.model_dump())
-                            elif hasattr(item, '__dict__'):
-                                try:
-                                    serializable_data[key].append(item.__dict__)
-                                except Exception:
-                                    serializable_data[key].append(str(item))
-                            else:
-                                serializable_data[key].append(item)
-                    else:
-                        serializable_data[key] = value
-
-                event_data = {
-                    "type": event_type,
-                    "data": serializable_data,
-                    "timestamp": asyncio.get_event_loop().time() if asyncio.get_event_loop().is_running() else 0
-                }
-                event_queue.put(event_data)
-                if event_type in ("agent_request", "agent_response"):
-                    collected_events.append(event_data)
-            except Exception as e:
-                logger.error(f"Failed to push event to queue: {e}")
-
-        async def run_workflow_async():
-            record_status = "success"
-            record_error = None
-            execution_history = []
-            try:
-                a2at_env_path = get_a2at_env_path()
-                engine = DynamicWorkflowEngine(psop, agent_cards, a2at_env_path=a2at_env_path)
-                engine.set_push_callback(push_callback)
-                event_queue.put({
-                    "type": "start",
-                    "data": {"psop_id": psop_id, "message": "Starting workflow execution"}
-                })
-                execution_history = await engine.run()
-                event_queue.put({
-                    "type": "complete",
-                    "data": {"psop_id": psop_id, "execution_history": execution_history}
-                })
-            except Exception as e:
-                logger.error(f"Workflow execution failed: {e}")
-                record_status = "failed"
-                record_error = str(e)
-                event_queue.put({
-                    "type": "error",
-                    "data": {"psop_id": psop_id, "error": str(e)}
-                })
-            finally:
-                try:
-                    final_psop = None
-                    try:
-                        final_psop = psop.model_dump() if hasattr(psop, 'model_dump') else str(psop)
-                    except Exception:
-                        pass
-                    record = ExecutionRecord(
-                        psop_id=psop_id,
-                        psop_name=getattr(psop, 'name', ''),
-                        started_at=started_at,
-                        completed_at=datetime.now(),
-                        status=record_status,
-                        execution_history=execution_history,
-                        final_psop=final_psop,
-                        events=collected_events,
-                        error=record_error,
-                    )
-                    handler = HandlerRegistry.get_handler(InterfaceType.SAVE_EXECUTION_RECORD)
-                    handler.handle(record)
-                    logger.info(f"Execution record saved: {record.execution_id}")
-                except Exception as e:
-                    logger.error(f"Failed to save execution record: {e}")
-
-        def run_workflow():
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            try:
-                loop.run_until_complete(run_workflow_async())
-            finally:
-                loop.close()
-
-        workflow_thread = threading.Thread(target=run_workflow)
-        workflow_thread.daemon = True
-        workflow_thread.start()
-
-        init_event = {'type': 'init', 'data': {'psop_id': psop_id, 'message': 'Initializing execution engine'}}
-        yield f"data: {json.dumps(init_event)}\n\n"
-
-        while workflow_thread.is_alive() or not event_queue.empty():
-            try:
-                event = event_queue.get(timeout=1)
-                yield f"data: {json.dumps(event)}\n\n"
-            except queue.Empty:
-                continue
-            except Exception as e:
-                logger.error(f"Failed to process event: {e}")
-
-        yield "event: close\ndata: {}\n\n"
-
-    return StreamingResponse(
-        event_generator(),
-        media_type="text/event-stream",
-        headers={
-            'Cache-Control': 'no-cache',
-            'Connection': 'keep-alive',
-            'X-Accel-Buffering': 'no'
-        }
-    )
+    return await run_psop_sse(psop, agent_cards)
 
 
 @router.delete("/execution-records/{execution_id}")
@@ -708,8 +559,9 @@ async def get_execution_record(execution_id: str):
     return ok(data=record.model_dump() if hasattr(record, 'model_dump') else record)
 
 
-# ──── Register router ────
+# ──── Register routers ────
 app.include_router(router)
+app.include_router(external_router)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

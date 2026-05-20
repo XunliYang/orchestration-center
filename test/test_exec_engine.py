@@ -998,8 +998,8 @@ class TestCrossLayerOrchestration:
                 context_from=["step1", "step2"]
             )
             result = engine._build_context_for_step(step)
-            assert "step1 结果" in result
-            assert "step2 结果" in result
+            assert "step1 Results" in result
+            assert "step2 Results" in result
             assert "task_a" in result
             assert "result from a" in result
             assert "task_b" in result
@@ -1036,11 +1036,11 @@ class TestCrossLayerOrchestration:
     def test_build_task_message_with_context(self):
         """Test _build_task_message prepends context to task description"""
         task = Task(description="summarize findings", agent="agent1", skill="skill1")
-        context = "## 前置步骤执行结果\n### step1 结果\n- 任务: \"analyze\"\n  输出: OK"
+        context = "## Previous Step Execution Results\n### step1 Results\n**Input (Task)**: \"analyze\"\n**Output (Result)**: OK"
         result = DynamicWorkflowEngine._build_task_message(task, context)
         assert context in result
         assert task.description in result
-        assert "当前任务" in result
+        assert "Current Task" in result
 
     @pytest.mark.asyncio
     async def test_step_outputs_accumulation(self, mock_llm_client):
@@ -1126,10 +1126,10 @@ class TestCrossLayerOrchestration:
 
             assert len(captured_messages) == 2
             step2_message = captured_messages[1][1]
-            assert "前置步骤执行结果" in step2_message
+            assert "Previous Step Execution Results" in step2_message
             assert "step1" in step2_message
             assert "analyze data" in step2_message
-            assert "当前任务" in step2_message
+            assert "Current Task" in step2_message
             assert "summarize all" in step2_message
 
     @pytest.mark.asyncio

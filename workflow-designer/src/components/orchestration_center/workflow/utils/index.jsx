@@ -96,7 +96,7 @@ export const getBestHandles = (sourceNode, targetNode) => {
 };
 
 /**
- * 4. Import Conversion：PSOP JSON -> React Flow Nodes/Edges
+ * 4. Import Conversion: PSOP JSON -> React Flow Nodes/Edges
  */
 export const transformWorkflowToReactFlow = (rawInput) => {
     // Compatible with the {data: {steps: []}} structure returned by the API
@@ -209,7 +209,7 @@ export const transformWorkflowToReactFlow = (rawInput) => {
 };
 
 /**
- * 5. Export Conversion：React Flow Nodes/Edges -> PSOP JSON
+ * 5. Export Conversion: React Flow Nodes/Edges -> PSOP JSON
  */
 export const transformReactFlowToPSOP = (nodes, edges, metadata = {}) => {
     const psopData = {

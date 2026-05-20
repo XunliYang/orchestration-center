@@ -481,7 +481,7 @@ const ExecutionCenter = ({ isDark }) => {
         }
     }, [psopStatus, selectedId]);
 
-    // 停止执行
+    // Stop execution
     const stopExecution = useCallback(() => {
         if (eventSource) {
             eventSource.close();
@@ -491,7 +491,7 @@ const ExecutionCenter = ({ isDark }) => {
         setRunningId(null);
     }, [eventSource]);
 
-    // 开始执行
+    // Start execution
     const startExecution = useCallback((overrideId) => {
         const idToRun = overrideId || selectedId;
         if (!idToRun) return;
