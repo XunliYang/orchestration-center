@@ -1,0 +1,192 @@
+{
+  "id": "9a8a934f-6f07-4488-a2dd-a84ca48f7905",
+  "name": "solutionpackage无线节能意图处理",
+  "description": "solutionpackage无线节能意图处理",
+  "created_at": "2026-05-21T07:26:58.285685",
+  "steps": [
+    {
+      "name": "step1",
+      "type": "AllSuccess",
+      "subtasks": [
+        {
+          "task_id": "task1",
+          "description": "Request RAN ES Intent Exploration",
+          "agent": "Energy Saving Intent Agent",
+          "skill": "Intent Exploration Request",
+          "status": "pending"
+        }
+      ],
+      "next": [
+        {
+          "step": "step2",
+          "condition": "Request sent"
+        }
+      ],
+      "layer": 0,
+      "context_from": null
+    },
+    {
+      "name": "step2",
+      "type": "AllSuccess",
+      "subtasks": [
+        {
+          "task_id": "task2",
+          "description": "Explore to evaluate and determine the best possible values for the specified RAN ES Intent targets",
+          "agent": "RAN Energy Saving Agent",
+          "skill": "RAN ES Intent Exploration",
+          "status": "pending"
+        },
+        {
+          "task_id": "task3",
+          "description": "Respond to obtain the RAN ES exploration report",
+          "agent": "RAN Energy Saving Agent",
+          "skill": "RAN ES Intent Exploration",
+          "status": "pending"
+        }
+      ],
+      "next": [
+        {
+          "step": "step3",
+          "condition": "Exploration report ready"
+        }
+      ],
+      "layer": 0,
+      "context_from": null
+    },
+    {
+      "name": "step3",
+      "type": "AllSuccess",
+      "subtasks": [
+        {
+          "task_id": "task4",
+          "description": "Generate RAN ES intent content based on exploration report and operator's business requirements",
+          "agent": "Energy Saving Intent Agent",
+          "skill": "Intent Generation",
+          "status": "pending"
+        }
+      ],
+      "next": [
+        {
+          "step": "step4",
+          "condition": "Intent generated"
+        }
+      ],
+      "layer": 1,
+      "context_from": [
+        "*"
+      ]
+    },
+    {
+      "name": "step4",
+      "type": "AllSuccess",
+      "subtasks": [
+        {
+          "task_id": "task5",
+          "description": "Request to deliver the RAN ES intent",
+          "agent": "Energy Saving Intent Agent",
+          "skill": "Intent Delivery",
+          "status": "pending"
+        }
+      ],
+      "next": [
+        {
+          "step": "step5",
+          "condition": "Delivery request sent"
+        }
+      ],
+      "layer": 0,
+      "context_from": null
+    },
+    {
+      "name": "step5",
+      "type": "AllSuccess",
+      "subtasks": [
+        {
+          "task_id": "task6",
+          "description": "Fulfill RAN ES intent including data collection, analysis, solution formulation and execution",
+          "agent": "RAN Energy Saving Agent",
+          "skill": "RAN ES Intent Lifecycle Management",
+          "status": "pending"
+        }
+      ],
+      "next": [
+        {
+          "step": "step6",
+          "condition": "Intent fulfilled"
+        }
+      ],
+      "layer": 0,
+      "context_from": null
+    },
+    {
+      "name": "step6",
+      "type": "AllSuccess",
+      "subtasks": [
+        {
+          "task_id": "task7",
+          "description": "Perform RAN ES effect evaluation and generate intent fulfillment report",
+          "agent": "Energy Saving Intent Agent",
+          "skill": "Effect Evaluation",
+          "status": "pending"
+        }
+      ],
+      "next": [
+        {
+          "step": "step7",
+          "condition": "Report generated"
+        }
+      ],
+      "layer": 1,
+      "context_from": [
+        "step5"
+      ]
+    },
+    {
+      "name": "step7",
+      "type": "AllSuccess",
+      "subtasks": [
+        {
+          "task_id": "task8",
+          "description": "Obtain the RAN ES intent fulfillment report",
+          "agent": "RAN Energy Saving Agent",
+          "skill": "RAN ES Intent Reporting",
+          "status": "pending"
+        }
+      ],
+      "next": [
+        {
+          "step": "step8",
+          "condition": "Report obtained"
+        }
+      ],
+      "layer": 0,
+      "context_from": null
+    },
+    {
+      "name": "step8",
+      "type": "AllSuccess",
+      "subtasks": [
+        {
+          "task_id": "task9",
+          "description": "Evaluate the Energy Saving effect for different RAN domains",
+          "agent": "Energy Saving Intent Agent",
+          "skill": "Effect Evaluation",
+          "status": "pending"
+        }
+      ],
+      "next": [
+        {
+          "step": "end",
+          "condition": "Evaluation completed"
+        }
+      ],
+      "layer": 1,
+      "context_from": [
+        "step7"
+      ]
+    }
+  ],
+  "related_preflow": null,
+  "user_intent": null,
+  "tags": []
+}

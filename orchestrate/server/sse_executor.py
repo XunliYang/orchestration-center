@@ -22,8 +22,7 @@ external API (external_api.py) to avoid code duplication.
 
 import asyncio
 import json
-import queue
-import threading
+import time
 from datetime import datetime
 from typing import List
 
@@ -39,7 +38,7 @@ from orchestrate.runtime.exec_engine import DynamicWorkflowEngine
 from samples.a2at_config import get_a2at_env_path
 
 
-async def run_psop_sse(psop: PSOP, agent_cards: List[AgentCard]) -> StreamingResponse:
+async def run_psop_sse(psop: PSOP, agent_cards: List[AgentCard], runtime_intent: str = None) -> StreamingResponse:
     """
     Execute a PSOP workflow and return an SSE stream.
 
@@ -53,46 +52,43 @@ async def run_psop_sse(psop: PSOP, agent_cards: List[AgentCard]) -> StreamingRes
         Persists an ExecutionRecord on completion.
     """
     async def event_generator():
-        event_queue = queue.Queue()
+        event_queue = asyncio.Queue()
         collected_events = []
         started_at = datetime.now()
 
         def push_callback(event_type: str, data: dict):
-            try:
-                serializable_data = {}
-                for key, value in data.items():
-                    if hasattr(value, 'model_dump'):
-                        serializable_data[key] = value.model_dump()
-                    elif hasattr(value, '__dict__'):
-                        try:
-                            serializable_data[key] = value.__dict__
-                        except Exception:
-                            serializable_data[key] = str(value)
-                    elif isinstance(value, (tuple, list)):
-                        serializable_data[key] = []
-                        for item in value:
-                            if hasattr(item, 'model_dump'):
-                                serializable_data[key].append(item.model_dump())
-                            elif hasattr(item, '__dict__'):
-                                try:
-                                    serializable_data[key].append(item.__dict__)
-                                except Exception:
-                                    serializable_data[key].append(str(item))
-                            else:
-                                serializable_data[key].append(item)
-                    else:
-                        serializable_data[key] = value
+            serializable_data = {}
+            for key, value in data.items():
+                if hasattr(value, 'model_dump'):
+                    serializable_data[key] = value.model_dump()
+                elif hasattr(value, '__dict__'):
+                    try:
+                        serializable_data[key] = value.__dict__
+                    except Exception:
+                        serializable_data[key] = str(value)
+                elif isinstance(value, (tuple, list)):
+                    serializable_data[key] = []
+                    for item in value:
+                        if hasattr(item, 'model_dump'):
+                            serializable_data[key].append(item.model_dump())
+                        elif hasattr(item, '__dict__'):
+                            try:
+                                serializable_data[key].append(item.__dict__)
+                            except Exception:
+                                serializable_data[key].append(str(item))
+                        else:
+                            serializable_data[key].append(item)
+                else:
+                    serializable_data[key] = value
 
-                event_data = {
-                    "type": event_type,
-                    "data": serializable_data,
-                    "timestamp": asyncio.get_event_loop().time() if asyncio.get_event_loop().is_running() else 0
-                }
-                event_queue.put(event_data)
-                if event_type in ("agent_request", "agent_response"):
-                    collected_events.append(event_data)
-            except Exception as e:
-                logger.error(f"Failed to push event: {e}")
+            event_data = {
+                "type": event_type,
+                "data": serializable_data,
+                "timestamp": time.monotonic()
+            }
+            event_queue.put_nowait(event_data)
+            if event_type in ("agent_request", "agent_response"):
+                collected_events.append(event_data)
 
         async def run_workflow_async():
             record_status = "success"
@@ -100,14 +96,14 @@ async def run_psop_sse(psop: PSOP, agent_cards: List[AgentCard]) -> StreamingRes
             execution_history = []
             try:
                 a2at_env_path = get_a2at_env_path()
-                engine = DynamicWorkflowEngine(psop, agent_cards, a2at_env_path=a2at_env_path)
+                engine = DynamicWorkflowEngine(psop, agent_cards, runtime_intent=runtime_intent, a2at_env_path=a2at_env_path)
                 engine.set_push_callback(push_callback)
-                event_queue.put({
+                await event_queue.put({
                     "type": "start",
                     "data": {"psop_id": psop.id, "message": "Execution started"}
                 })
                 execution_history = await engine.run()
-                event_queue.put({
+                await event_queue.put({
                     "type": "complete",
                     "data": {"psop_id": psop.id, "execution_history": execution_history}
                 })
@@ -115,7 +111,7 @@ async def run_psop_sse(psop: PSOP, agent_cards: List[AgentCard]) -> StreamingRes
                 logger.error(f"Execution failed: {e}")
                 record_status = "failed"
                 record_error = str(e)
-                event_queue.put({
+                await event_queue.put({
                     "type": "error",
                     "data": {"psop_id": psop.id, "error": str(e)}
                 })
@@ -142,30 +138,23 @@ async def run_psop_sse(psop: PSOP, agent_cards: List[AgentCard]) -> StreamingRes
                     logger.info(f"Execution record saved: {record.execution_id}")
                 except Exception as e:
                     logger.error(f"Failed to save execution record: {e}")
+                await event_queue.put(None)
 
-        def run_workflow():
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            try:
-                loop.run_until_complete(run_workflow_async())
-            finally:
-                loop.close()
-
-        workflow_thread = threading.Thread(target=run_workflow)
-        workflow_thread.daemon = True
-        workflow_thread.start()
+        workflow_task = asyncio.create_task(run_workflow_async())
 
         init_event = {'type': 'init', 'data': {'psop_id': psop.id, 'message': 'Initializing execution engine'}}
         yield f"data: {json.dumps(init_event)}\n\n"
 
-        while workflow_thread.is_alive() or not event_queue.empty():
+        while True:
             try:
-                event = event_queue.get(timeout=1)
-                yield f"data: {json.dumps(event)}\n\n"
-            except queue.Empty:
+                event = await asyncio.wait_for(event_queue.get(), timeout=1.0)
+            except asyncio.TimeoutError:
                 continue
-            except Exception as e:
-                logger.error(f"Failed to process event: {e}")
+            if event is None:
+                break
+            yield f"data: {json.dumps(event)}\n\n"
+
+        await workflow_task
 
         yield "event: close\ndata: {}\n\n"
 

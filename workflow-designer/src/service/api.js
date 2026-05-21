@@ -137,8 +137,12 @@ export async function matchWorkflows(intent) {
 
 // ──── Workflow Execution ────
 
-export function getStartProcessStreamUrl(psopId) {
-    return `${ORCHESTRATE_BASE()}/execute?psop_id=${psopId}`;
+export function getStartProcessStreamUrl(psopId, userIntent = '') {
+    const base = `${ORCHESTRATE_BASE()}/execute?psop_id=${psopId}`;
+    if (userIntent) {
+        return `${base}&user_intent=${encodeURIComponent(userIntent)}`;
+    }
+    return base;
 }
 
 // ──── Execution Records ────

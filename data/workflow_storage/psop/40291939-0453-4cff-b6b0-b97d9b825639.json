@@ -1,0 +1,74 @@
+{
+  "id": "40291939-0453-4cff-b6b0-b97d9b825639",
+  "name": "专线故障意图+诊断",
+  "description": "专线故障意图+诊断",
+  "created_at": "2026-05-21T00:33:16.772305",
+  "steps": [
+    {
+      "name": "step1",
+      "type": "AllSuccess",
+      "subtasks": [
+        {
+          "task_id": "70614b99-7d58-4981-867b-e4824c51199b",
+          "description": "负责设置节能意图，与RAN能效优化智能体交互，进行意图预评估、意图生成与交付，并对节能效果进行评估与调整。",
+          "agent": "Energy Saving Intent Agent",
+          "skill": "Intent Exploration Request",
+          "status": "pending"
+        }
+      ],
+      "next": [
+        {
+          "step": "step3",
+          "condition": ""
+        }
+      ],
+      "layer": 0,
+      "context_from": null
+    },
+    {
+      "name": "step2",
+      "type": "AllSuccess",
+      "subtasks": [
+        {
+          "task_id": "6e091fbf-fed6-43f6-8fbc-fc2a5cafa77d",
+          "description": "负责保障策略及其恢复策略的生成。",
+          "agent": "Assurance Agent",
+          "skill": "策略生成",
+          "status": "pending"
+        }
+      ],
+      "next": [
+        {
+          "step": "step3",
+          "condition": ""
+        }
+      ],
+      "layer": 0,
+      "context_from": null
+    },
+    {
+      "name": "step3",
+      "type": "AllSuccess",
+      "subtasks": [
+        {
+          "task_id": "b2482ffe-fbe2-4410-901b-9f832e8be931",
+          "description": "负责地市1的SPN网络专线故障诊断，接收诊断指令并返回诊断结果。",
+          "agent": "SPN Fault Handling Agent City1 OMC",
+          "skill": "专线故障诊断",
+          "status": "pending"
+        }
+      ],
+      "next": [
+        {
+          "step": "endNode",
+          "condition": ""
+        }
+      ],
+      "layer": 1,
+      "context_from": null
+    }
+  ],
+  "related_preflow": null,
+  "user_intent": null,
+  "tags": []
+}

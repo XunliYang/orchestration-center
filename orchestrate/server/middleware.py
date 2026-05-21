@@ -111,8 +111,8 @@ def parser_rate_lime(interface_name: str, config):
         # External API endpoints mapped to existing config keys
         "sop_orchestrate":(FLOW_CTL_PLAN, 50),
         "intent_orchestrate":(FLOW_CTL_GENERATE_PSOP, 50),
-        "execute_workflow":(FLOW_CTL_START_PROCESS_STREAM, 50),
-        "execute_by_id":(FLOW_CTL_START_PROCESS_STREAM, 50),
+        "ext_execute_auto":(FLOW_CTL_START_PROCESS_STREAM, 50),
+        "ext_execute_by_id":(FLOW_CTL_START_PROCESS_STREAM, 50),
         "list_agents":(FLOW_CTL_AGENT_CARDS, 50),
         "get_execution":(FLOW_CTL_ONE_PSOP, 50),
     }

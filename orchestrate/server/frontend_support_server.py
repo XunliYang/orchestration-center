@@ -518,12 +518,13 @@ async def list_agent_cards(
 
 @router.get("/execute")
 async def execute_workflow(
-    psop_id: str = Query(..., description="PSOP workflow ID to execute")
+    psop_id: str = Query(..., description="PSOP workflow ID to execute"),
+    user_intent: str = Query(None, description="Runtime user intent for context injection")
 ):
     if not psop_id:
         raise HTTPException(status_code=400, detail="Missing psop_id parameter")
 
-    logger.info(f"Starting workflow execution: psop_id={psop_id}")
+    logger.info(f"Starting workflow execution: psop_id={psop_id}, user_intent={user_intent[:80] if user_intent else 'N/A'}")
     psop = retrieval.get_psop_by_id(psop_id)
     if not psop:
         raise HTTPException(status_code=404, detail=f"Workflow {psop_id} not found")
@@ -531,7 +532,7 @@ async def execute_workflow(
     logger.info(f"Workflow loaded: name={psop.name}, steps={len(psop.steps)}")
     agent_cards = get_agent_cards()
 
-    return await run_psop_sse(psop, agent_cards)
+    return await run_psop_sse(psop, agent_cards, runtime_intent=user_intent)
 
 
 @router.delete("/execution-records/{execution_id}")
