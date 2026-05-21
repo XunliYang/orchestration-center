@@ -26,8 +26,9 @@ import UnifiedWorkflow from '../orchestration_center/workflow/index.jsx';
 
 const parseProtobufText = (raw) => {
     if (!raw || typeof raw !== 'string') return { text: raw, metadata: null };
+    const normalized = raw.replace(/\\n/g, '\n');
     const result = { text: '', metadata: {} };
-    const lines = raw.split('\n');
+    const lines = normalized.split('\n');
     let inParts = false;
     let partsText = [];
     for (const line of lines) {
@@ -37,20 +38,31 @@ const parseProtobufText = (raw) => {
         if (msgIdMatch) { result.metadata.message_id = msgIdMatch[1]; continue; }
         const roleMatch = trimmed.match(/^role:\s*(.+)$/);
         if (roleMatch) { result.metadata.role = roleMatch[1]; continue; }
-        if (trimmed === 'parts {') { inParts = true; continue; }
+        if (trimmed.startsWith('parts')) {
+            const partsInlineMatch = trimmed.match(/^parts\s*\{[^}]*text:\s*"(.+)"[^}]*\}$/);
+            if (partsInlineMatch) { partsText.push(partsInlineMatch[1]); continue; }
+            inParts = true; continue;
+        }
         if (inParts && trimmed === '}') { inParts = false; continue; }
         if (inParts) {
             const textMatch = trimmed.match(/^text:\s*"(.+)"$/);
             if (textMatch) partsText.push(textMatch[1]);
         }
     }
-    result.text = partsText.join('\n');
+    if (partsText.length > 0) {
+        result.text = partsText.join('\n');
+    } else {
+        const textOnlyMatch = normalized.match(/text:\s*"([^"]+)"/);
+        if (textOnlyMatch) result.text = textOnlyMatch[1];
+        else result.text = normalized;
+    }
     return result;
 };
 
 const MarkdownRenderer = React.memo(({ text }) => {
     if (!text) return null;
-    const lines = text.split('\n');
+    const normalized = text.replace(/\\n/g, '\n');
+    const lines = normalized.split('\n');
     const elements = [];
     let i = 0;
     while (i < lines.length) {
@@ -100,6 +112,44 @@ const MarkdownRenderer = React.memo(({ text }) => {
                     {items.map((item, idx) => <li key={idx}>{renderInlineMarkdown(item)}</li>)}
                 </ol>
             );
+            continue;
+        }
+
+        const tableRowMatch = line.match(/^\|(.+)\|$/);
+        if (tableRowMatch) {
+            const tableLines = [];
+            while (i < lines.length && lines[i].match(/^\|(.+)\|$/)) {
+                tableLines.push(lines[i]);
+                i++;
+            }
+            const isSeparator = (row) => /^\|[\s\-:]+\|[\s\-:]+\|/.test(row);
+            const dataRows = tableLines.filter(r => !isSeparator(r));
+            if (dataRows.length >= 1) {
+                const headerCells = dataRows[0].split('|').filter(c => c.trim() !== '').map(c => c.trim());
+                const bodyRows = dataRows.slice(1).map(r => r.split('|').filter(c => c.trim() !== '').map(c => c.trim()));
+                elements.push(
+                    <div key={i} className="my-3 overflow-x-auto">
+                        <table className="w-full text-sm border-collapse rounded-xl overflow-hidden border border-zinc-200 dark:border-zinc-700">
+                            <thead>
+                                <tr className="bg-zinc-50 dark:bg-zinc-800/80">
+                                    {headerCells.map((cell, idx) => (
+                                        <th key={idx} className="px-4 py-2.5 text-left font-bold text-zinc-700 dark:text-zinc-200 border-b border-zinc-200 dark:border-zinc-700">{renderInlineMarkdown(cell)}</th>
+                                    ))}
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {bodyRows.map((row, rIdx) => (
+                                    <tr key={rIdx} className="border-b border-zinc-100 dark:border-zinc-800/50 hover:bg-zinc-50/50 dark:hover:bg-zinc-800/30 transition-colors">
+                                        {row.map((cell, cIdx) => (
+                                            <td key={cIdx} className="px-4 py-2 text-zinc-600 dark:text-zinc-300">{renderInlineMarkdown(cell)}</td>
+                                        ))}
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                );
+            }
             continue;
         }
 
@@ -303,11 +353,7 @@ const LogEntry = React.memo(({ event, isDark, t, isSelected }) => {
                 ) : (
                     <div className="text-zinc-800 dark:text-zinc-200">
                         {displayText ? (
-                            event.type === 'agent_response' ? (
-                                <MarkdownRenderer text={displayText} />
-                            ) : (
-                                <pre className="font-sans text-[14px] whitespace-pre-wrap leading-relaxed">{displayText}</pre>
-                            )
+                            <MarkdownRenderer text={displayText} />
                         ) : (
                             <span className="italic opacity-40">{t('execution.no_text')}</span>
                         )}
@@ -341,6 +387,7 @@ const ExecutionCenter = ({ isDark }) => {
     const [isMatching, setIsMatching] = useState(false);
     const [matchedWorkflows, setMatchedWorkflows] = useState([]);
     const [runningId, setRunningId] = useState(null);
+    const [selectedExecutionId, setSelectedExecutionId] = useState(null);
 
     const logScrollRef = useRef(null);
     const [autoScroll, setAutoScroll] = useState(true);
@@ -418,6 +465,7 @@ const ExecutionCenter = ({ isDark }) => {
             const res = await getExecutionRecord(executionId);
             if (res.status === 'success') {
                 const record = res.data;
+                setSelectedExecutionId(executionId);
                 if (record.final_psop) setPsopStatus(record.final_psop);
                 if (record.events && record.events.length > 0) setEvents(record.events);
                 setIsRunning(false);
@@ -502,8 +550,9 @@ const ExecutionCenter = ({ isDark }) => {
         setIsRunning(true);
         setRunningId(idToRun);
         setAutoScroll(true);
+        setSelectedExecutionId(null);
 
-        const url = getStartProcessStreamUrl(idToRun);
+        const url = getStartProcessStreamUrl(idToRun, userIntent);
         const es = new EventSource(url);
 
         es.onmessage = (event) => {
@@ -716,7 +765,7 @@ const ExecutionCenter = ({ isDark }) => {
                                         key={record.execution_id}
                                         onClick={() => loadHistoryDetail(record.execution_id)}
                                         className={`group relative p-4 rounded-2xl border transition-all cursor-pointer
-                                            ${selectedId === record.psop_id && !isRunning
+                                            ${selectedExecutionId === record.execution_id
                                                 ? 'bg-blue-500/10 border-blue-500/50' 
                                                 : 'bg-white/50 dark:bg-black/20 border-transparent hover:border-zinc-200 dark:hover:border-zinc-700'}
                                         `}

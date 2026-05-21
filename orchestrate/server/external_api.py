@@ -32,11 +32,13 @@ import json
 import re
 from typing import Any, List, Optional
 
+import anyio
 from a2a.types import AgentCard
-from fastapi import APIRouter, File, HTTPException, Request, UploadFile, Depends
+from fastapi import APIRouter, File, Form, HTTPException, Query, Request, UploadFile, Depends
 from loguru import logger
 from pydantic import BaseModel, Field
 
+from common.config import FLOW_CTL_START_PROCESS_STREAM, FLOW_CTL_PLAN, FLOW_CTL_GENERATE_PSOP
 from common.custom.default_handle import HandlerRegistry
 from common.custom.interface_type import InterfaceType
 from orchestrate.core.intent_psop_generator import IntentPsopGenerator
@@ -56,6 +58,10 @@ router = APIRouter(prefix="/api/v1")
 config = get_conf()
 
 MAX_FILE_SIZE_BYTES = 100 * 1024 * 1024
+
+execute_semaphore = anyio.Semaphore(int(config.get(FLOW_CTL_START_PROCESS_STREAM)))
+sop_semaphore = anyio.Semaphore(int(config.get(FLOW_CTL_PLAN)))
+intent_semaphore = anyio.Semaphore(int(config.get(FLOW_CTL_GENERATE_PSOP)))
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -86,6 +92,7 @@ async def orchestrate_sop(
     request: Request,
     body: Optional[SOPOrchestrateRequest] = None,
     file: Optional[UploadFile] = File(None),
+    name: Optional[str] = Form(None),
     _: Any = Depends(RateLimiter(config, "sop_orchestrate"))
 ):
     """
@@ -93,49 +100,59 @@ async def orchestrate_sop(
 
     Accepts either:
     - JSON body with `sop_content` (natural language SOP text)
-    - File upload (PDF SolutionPackage)
+    - File upload (PDF SolutionPackage), with optional `name` form field
 
     Returns a generated PSOP workflow.
     """
-    sop_text = ""
-    workflow_name = None
+    acquired = False
+    try:
+        sop_semaphore.acquire_nowait()
+        acquired = True
 
-    if file:
-        filename = file.filename or ""
-        if not re.match(r'^[\w\-. ]{1,128}\.(pdf|txt|md)$', filename, re.IGNORECASE):
-            raise HTTPException(status_code=400, detail=f"Invalid filename: {filename}")
-        content = await file.read()
-        if len(content) > MAX_FILE_SIZE_BYTES:
-            raise HTTPException(status_code=413, detail="File too large")
-        if filename.lower().endswith('.pdf') and not content.startswith(b'%PDF-'):
-            raise HTTPException(status_code=400, detail="Not a valid PDF file")
-        await file.seek(0)
-        parser = SolutionPackageParser()
-        try:
-            preflow = parser.parse_pdf(file.file, filename)
-            sop_text = preflow.steps_md
-            workflow_name = preflow.name
-        except ValueError as e:
-            raise HTTPException(status_code=400, detail=str(e))
-    elif body:
-        sop_text = body.sop_content
-        workflow_name = body.name
-    else:
-        raise HTTPException(status_code=400, detail="Either sop_content or file upload is required")
+        sop_text = ""
+        workflow_name = name
 
-    if not sop_text or not sop_text.strip():
-        raise HTTPException(status_code=400, detail="SOP content is empty")
+        if file:
+            filename = file.filename or ""
+            if not re.match(r'^[\w\-. ]{1,128}\.(pdf|txt|md)$', filename, re.IGNORECASE):
+                raise HTTPException(status_code=400, detail=f"Invalid filename: {filename}")
+            content = await file.read()
+            if len(content) > MAX_FILE_SIZE_BYTES:
+                raise HTTPException(status_code=413, detail="File too large")
+            if filename.lower().endswith('.pdf') and not content.startswith(b'%PDF-'):
+                raise HTTPException(status_code=400, detail="Not a valid PDF file")
+            await file.seek(0)
+            parser = SolutionPackageParser()
+            try:
+                preflow = parser.parse_pdf(file.file, filename)
+                sop_text = preflow.steps_md
+                workflow_name = workflow_name or preflow.name
+            except ValueError as e:
+                raise HTTPException(status_code=400, detail=str(e))
+        elif body:
+            sop_text = body.sop_content
+            workflow_name = workflow_name or body.name
+        else:
+            raise HTTPException(status_code=400, detail="Either sop_content or file upload is required")
 
-    agent_cards = get_agent_cards()
-    preflow = PreFlow(name=workflow_name or "SOP Workflow", steps_md=sop_text)
-    generator = PsopGenerator()
-    psop = generator.generate_psop_workflow(preflow, agent_cards)
-    psop.user_intent = sop_text[:200]
-    psop.related_preflow = preflow.id
+        if not sop_text or not sop_text.strip():
+            raise HTTPException(status_code=400, detail="SOP content is empty")
 
-    save_handler = HandlerRegistry.get_handler(InterfaceType.SAVE_PSOP)
-    save_handler.handle(psop)
-    return created(data=psop.model_dump(), message="PSOP generated and saved")
+        agent_cards = get_agent_cards()
+        preflow = PreFlow(name=workflow_name or "SOP Workflow", steps_md=sop_text)
+        generator = PsopGenerator()
+        psop = generator.generate_psop_workflow(preflow, agent_cards)
+        psop.user_intent = sop_text[:200]
+        psop.related_preflow = preflow.id
+
+        save_handler = HandlerRegistry.get_handler(InterfaceType.SAVE_PSOP)
+        save_handler.handle(psop)
+        return created(data=psop.model_dump(), message="PSOP generated and saved")
+    except anyio.WouldBlock:
+        raise HTTPException(status_code=503, detail="Server is busy")
+    finally:
+        if acquired:
+            sop_semaphore.release()
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -154,13 +171,22 @@ async def orchestrate_intent(
     Generates a PSOP workflow directly from a natural language intent/task description.
     No SOP steps required — the LLM plans the workflow autonomously.
     """
-    agent_cards = get_agent_cards()
-    generator = IntentPsopGenerator()
-    psop = generator.generate_psop_from_intent(body.intent, agent_cards, body.name)
+    acquired = False
+    try:
+        intent_semaphore.acquire_nowait()
+        acquired = True
+        agent_cards = get_agent_cards()
+        generator = IntentPsopGenerator()
+        psop = generator.generate_psop_from_intent(body.intent, agent_cards, body.name)
 
-    save_handler = HandlerRegistry.get_handler(InterfaceType.SAVE_PSOP)
-    save_handler.handle(psop)
-    return created(data=psop.model_dump(), message="PSOP generated and saved")
+        save_handler = HandlerRegistry.get_handler(InterfaceType.SAVE_PSOP)
+        save_handler.handle(psop)
+        return created(data=psop.model_dump(), message="PSOP generated and saved")
+    except anyio.WouldBlock:
+        raise HTTPException(status_code=503, detail="Server is busy")
+    finally:
+        if acquired:
+            intent_semaphore.release()
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -171,7 +197,7 @@ async def orchestrate_intent(
 async def execute_workflow(
     request: Request,
     body: ExecuteRequest,
-    _: Any = Depends(RateLimiter(config, "execute_workflow"))
+    _: Any = Depends(RateLimiter(config, "ext_execute_auto"))
 ):
     """
     Auto-orchestrate and execute.
@@ -183,22 +209,32 @@ async def execute_workflow(
 
     Returns an SSE stream with execution progress and results.
     """
-    retrieval = WorkflowRetrieval(get_workflow_storage())
-    psop = retrieval.retrieve_psop_by_intent(body.task)
+    acquired = False
+    try:
+        execute_semaphore.acquire_nowait()
+        acquired = True
+        retrieval = WorkflowRetrieval(get_workflow_storage())
+        psop = retrieval.retrieve_psop_by_intent(body.task)
 
-    if not psop:
-        logger.info(f"No existing PSOP found for task, auto-generating...")
-        try:
-            agent_cards = get_agent_cards()
-            generator = IntentPsopGenerator()
-            psop = generator.generate_psop_from_intent(body.task, agent_cards, body.name)
-            save_handler = HandlerRegistry.get_handler(InterfaceType.SAVE_PSOP)
-            save_handler.handle(psop)
-            logger.info(f"Auto-generated PSOP: {psop.id}")
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Auto-generation failed: {e}")
+        if not psop:
+            logger.info(f"No existing PSOP found for task, auto-generating...")
+            try:
+                agent_cards = get_agent_cards()
+                generator = IntentPsopGenerator()
+                psop = generator.generate_psop_from_intent(body.task, agent_cards, body.name)
+                save_handler = HandlerRegistry.get_handler(InterfaceType.SAVE_PSOP)
+                save_handler.handle(psop)
+                logger.info(f"Auto-generated PSOP: {psop.id}")
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=f"Auto-generation failed: {e}")
 
-    return await run_psop_sse(psop, get_agent_cards())
+        agent_cards = get_agent_cards()
+        return await run_psop_sse(psop, agent_cards, runtime_intent=body.task)
+    except anyio.WouldBlock:
+        raise HTTPException(status_code=503, detail="Server is busy")
+    finally:
+        if acquired:
+            execute_semaphore.release()
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -209,18 +245,28 @@ async def execute_workflow(
 async def execute_psop_by_id(
     request: Request,
     psop_id: str,
-    _: Any = Depends(RateLimiter(config, "execute_by_id"))
+    user_intent: str = Query(None, description="Runtime user intent for context injection"),
+    _: Any = Depends(RateLimiter(config, "ext_execute_by_id"))
 ):
     """
     Execute a known PSOP workflow by ID.
 
     Returns an SSE stream with execution progress and results.
     """
-    retrieval = WorkflowRetrieval(get_workflow_storage())
-    psop = retrieval.get_psop_by_id(psop_id)
-    if not psop:
-        raise HTTPException(status_code=404, detail=f"PSOP {psop_id} not found")
-    return await run_psop_sse(psop, get_agent_cards())
+    acquired = False
+    try:
+        execute_semaphore.acquire_nowait()
+        acquired = True
+        retrieval = WorkflowRetrieval(get_workflow_storage())
+        psop = retrieval.get_psop_by_id(psop_id)
+        if not psop:
+            raise HTTPException(status_code=404, detail=f"PSOP {psop_id} not found")
+        return await run_psop_sse(psop, get_agent_cards(), runtime_intent=user_intent)
+    except anyio.WouldBlock:
+        raise HTTPException(status_code=503, detail="Server is busy")
+    finally:
+        if acquired:
+            execute_semaphore.release()
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

@@ -40,8 +40,9 @@ from common.llm import get_llm_instance
 from orchestrate.core.model.psop import PSOP, Step, Task, TaskStatus
 
 class DynamicWorkflowEngine:
-    def __init__(self, psop: PSOP, agent_cards, a2at_env_path: Path = None):
+    def __init__(self, psop: PSOP, agent_cards, runtime_intent: str = None, a2at_env_path: Path = None):
         self.workflow = psop
+        self.runtime_intent = runtime_intent
         self.current_step_idx = 0
         self.execution_history = []
         self.llm_client = get_llm_instance()
@@ -374,8 +375,13 @@ class DynamicWorkflowEngine:
 
     def _build_context_for_step(self, step: Step) -> str:
         if step.layer <= 0:
+            if self.runtime_intent:
+                return f"## Runtime Context\n\nUser's original intent and scenario description:\n{self.runtime_intent}"
             return ""
-        parts = ["## Previous Step Execution Results\n"]
+        parts = []
+        if self.runtime_intent:
+            parts.append(f"## Runtime Context\n\nUser's original intent and scenario description:\n{self.runtime_intent}")
+        parts.append("## Previous Step Execution Results\n")
         if step.context_from and "*" in step.context_from:
             ref_pairs = [(name, results) for name, results in self.step_outputs.items()]
         elif step.context_from:

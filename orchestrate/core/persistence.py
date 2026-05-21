@@ -13,6 +13,7 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+import json
 from loguru import logger
 from pathlib import Path
 from typing import Optional, List, Dict, Any
@@ -182,18 +183,42 @@ class WorkflowStorage:
         List all PSOP IDs in storage.
 
         Returns:
-            List[str]: List of PSOP IDs
+            List[str]: List of PSOP IDs (from JSON content, not filenames)
         """
-        return [f.stem for f in self.psop_dir.glob("*.json")]
+        ids = []
+        for f in self.psop_dir.glob("*.json"):
+            try:
+                with open(f, "r", encoding='utf-8') as fh:
+                    data = json.loads(fh.read())
+                    internal_id = data.get("id")
+                    if internal_id:
+                        ids.append(internal_id)
+                    else:
+                        ids.append(f.stem)
+            except Exception:
+                ids.append(f.stem)
+        return ids
 
     def list_preflows(self) -> List[str]:
         """
         List all PreFlow IDs in storage.
 
         Returns:
-            List[str]: List of PreFlow IDs
+            List[str]: List of PreFlow IDs (from JSON content, not filenames)
         """
-        return [f.stem for f in self.preflow_dir.glob("*.json")]
+        ids = []
+        for f in self.preflow_dir.glob("*.json"):
+            try:
+                with open(f, "r", encoding='utf-8') as fh:
+                    data = json.loads(fh.read())
+                    internal_id = data.get("id")
+                    if internal_id:
+                        ids.append(internal_id)
+                    else:
+                        ids.append(f.stem)
+            except Exception:
+                ids.append(f.stem)
+        return ids
 
     def update_psop(self, psop: PSOP) -> bool:
         """
