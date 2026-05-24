@@ -106,6 +106,9 @@ def pre_insert_psop():
     storage = get_workflow_storage()
     for wf_id in storage.list_psops():
         psop = storage.load_psop(wf_id)
+        if psop is None:
+            logger.warning(f"pre_insert_psop: workflow {wf_id} not found, skipping")
+            continue
         save_handle = HandlerRegistry.get_handler(InterfaceType.SAVE_PSOP)
         save_handle.handle(psop)
 
@@ -127,7 +130,11 @@ async def start_server(agent_card: AgentCard, port: int, host: str = "127.0.0.1"
     if not agent_class:
         raise ValueError(f"unknown Agent : {agent_name}")
 
-    agent_impl = agent_class()
+    try:
+        agent_impl = agent_class()
+    except Exception as e:
+        logger.error(f"Failed to initialize agent '{agent_name}': {e}")
+        return
 
     request_handler = DefaultRequestHandler(
         agent_executor=agent_impl,
@@ -152,18 +159,32 @@ async def start_server(agent_card: AgentCard, port: int, host: str = "127.0.0.1"
 
 
 async def main() -> None:
-    pre_insert_psop()
-    agent_lib = AgentCardLoader()
-    agent_cards = agent_lib.get_all_agent_cards()
-    factory = AgentRegistryClientFactory().create_from_env()
+    try:
+        pre_insert_psop()
+    except Exception as e:
+        logger.error(f"pre_insert_psop failed (agents will still start): {e}")
+
+    try:
+        agent_lib = AgentCardLoader()
+        agent_cards = agent_lib.get_all_agent_cards()
+    except Exception as e:
+        logger.error(f"Failed to load agent cards: {e}")
+        return
+
+    factory = None
+    try:
+        factory = AgentRegistryClientFactory().create_from_env()
+    except Exception as e:
+        logger.warning(f"Failed to create registry client (agents will start without registration): {e}")
 
     tasks: List[asyncio.Task] = []
     for agent_card in agent_cards:
-        try:
-            result = register_or_update_agent(factory, agent_card)
-            logger.info(f"register/update agentcard for {agent_card.name}, result is {result}")
-        except Exception as e:
-            logger.error(f"register/update agent card failed: {e}")
+        if factory:
+            try:
+                result = register_or_update_agent(factory, agent_card)
+                logger.info(f"register/update agentcard for {agent_card.name}, result is {result}")
+            except Exception as e:
+                logger.error(f"register/update agent card failed: {e}")
         agent_name = agent_card.name
         parsed = urlparse(agent_card.supported_interfaces[0].url)
         task = asyncio.create_task(
