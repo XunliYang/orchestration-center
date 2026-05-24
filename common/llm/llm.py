@@ -13,14 +13,32 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-from common.llm.config.llm_config import get_llm_config_by_type, LLMType
-from common.llm.provider.llm_provider_registry import get_or_create_llm_instance
+import dataclasses
+from common.llm.config.llm_config import get_model_config
+from common.llm.provider.generic_llm import GenericLLM
+
+_instances = {}
 
 
-def get_llm_instance(llm_type: LLMType = LLMType.OPENAI_STYLE_LLM):
-    """get a LLM instance.
+def _get_instance(capability: str) -> GenericLLM:
+    if capability not in _instances:
+        config = get_model_config(capability)
+        if config is None:
+            raise ValueError(
+                f"No model configured for capability '{capability}' "
+                f"in llm_config.json"
+            )
+        _instances[capability] = GenericLLM(dataclasses.asdict(config))
+    return _instances[capability]
 
-    Returns:
-        A LLM instance
-    """
-    return get_or_create_llm_instance(get_llm_config_by_type(llm_type))
+
+def get_llm_instance(capability: str = "chat"):
+    return _get_instance(capability)
+
+
+def get_embed_instance():
+    return _get_instance("embed")
+
+
+def get_rerank_instance():
+    return _get_instance("rerank")
