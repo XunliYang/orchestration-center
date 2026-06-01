@@ -357,6 +357,8 @@ async def parse_pdf(
         if not pre_md:
             raise HTTPException(status_code=400, detail="Chapter '5. Interaction Flow' not found in PDF")
 
+        logger.info(f"PDF chapter extracted (markdown, {len(pre_md)} chars):\n{pre_md}")
+
         preflow = PreFlow(
             name=file.filename,
             description=f"Workflow parsed from PDF {file.filename}",
@@ -391,7 +393,9 @@ async def generate_from_preflow(
         plan_semaphore.acquire_nowait()
         acquired = True
         preflow_name = request.preflow.get("name", "unknown")
+        preflow_steps_md = request.preflow.get("steps_md", "")
         logger.info(f"Generating PSOP from PreFlow: {preflow_name}, agents={len(request.agent_cards)}")
+        logger.info(f"PreFlow steps_md ({len(preflow_steps_md)} chars):\n{preflow_steps_md}")
 
         generator = PsopGenerator()
         workflow = generator.generate_psop_workflow(

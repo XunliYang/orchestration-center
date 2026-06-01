@@ -194,8 +194,9 @@ Output the result in our custom PSOP workflow format.
 - context_from example: ["step1","step2"] injects the outputs of step1 and step2
   into the current step's Agent context.
 - **Recommended**: When branching paths exist (multiple steps can reach the aggregation
-  step), use context_from: ["*"] to automatically reference all previously executed
-  step outputs, avoiding omissions.
+  step), use context_from: ["*"] to include ALL predecessors transitively
+  (direct + indirect ancestors), avoiding omissions. Set context_from to null
+  (auto-derive) to let the engine determine direct predecessors dynamically at runtime.
 - If a step's Agent operates independently without needing other step results,
   do NOT set context_from.
 
@@ -239,7 +240,8 @@ directly from the user's intent.
    - Aggregation steps must set context_from with the list of upstream step names they depend on.
    - context_from example: ["step1","step2"] injects step1 and step2 outputs into the current step's Agent context.
    - **Recommended**: When branching paths exist (multiple steps can reach the aggregation step),
-     use context_from: ["*"] to automatically reference all previously executed step outputs.
+     use context_from: ["*"] to include ALL predecessors transitively (direct + indirect ancestors).
+     Use null to let the engine auto-derive direct predecessors at runtime.
    - Execution layer steps do NOT need context_from.
 8. **Typical Patterns**: When the user intent includes terms like "summarize", "synthesize",
    "root cause analysis", "generate final recommendations", etc., the final step should

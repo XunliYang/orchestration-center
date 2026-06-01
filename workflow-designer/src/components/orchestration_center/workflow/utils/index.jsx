@@ -256,7 +256,7 @@ export const transformReactFlowToPSOP = (nodes, edges, metadata = {}) => {
                 type: data.type || "AllSuccess",
                 subtasks: subtasks,
                 next: [],
-                layer: typeof data.layer === 'number' ? data.layer : 0,
+                layer: typeof data.layer === 'number' ? (data.layer > 1 ? 1 : data.layer) : 0,
                 context_from: data.context_from && data.context_from.length > 0 ? data.context_from : null
             };
         }

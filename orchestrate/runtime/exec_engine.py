@@ -375,6 +375,19 @@ class DynamicWorkflowEngine:
                         break
         return predecessors
 
+    def _get_all_predecessors(self, step_name: str) -> List[str]:
+        ancestors = set()
+        queue = [step_name]
+        while queue:
+            current = queue.pop(0)
+            for s in self.workflow.steps:
+                if s.next:
+                    for jc in s.next:
+                        if jc.step == current and s.name not in ancestors:
+                            ancestors.add(s.name)
+                            queue.append(s.name)
+        return list(ancestors)
+
     def _build_context_for_step(self, step: Step) -> str:
         if step.layer <= 0:
             if self.runtime_intent:
@@ -385,7 +398,9 @@ class DynamicWorkflowEngine:
             parts.append(f"## Runtime Context\n\nUser's original intent and scenario description:\n{self.runtime_intent}")
         parts.append("## Previous Step Execution Results\n")
         if step.context_from and "*" in step.context_from:
-            ref_pairs = [(name, results) for name, results in self.step_outputs.items()]
+            all_predecessors = self._get_all_predecessors(step.name)
+            ref_pairs = [(name, self.step_outputs[name])
+                         for name in all_predecessors if name in self.step_outputs]
         elif step.context_from:
             ref_pairs = [(name, self.step_outputs[name])
                          for name in step.context_from if name in self.step_outputs]

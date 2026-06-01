@@ -1,16 +1,16 @@
 {
-  "id": "a372a9c7-e9c1-4407-9fb3-d7b574654381",
-  "name": "赛事策略保障",
-  "description": "赛事策略保障",
-  "created_at": "2026-05-20T20:36:35.840187",
+  "id": "psop_live_event_assurance",
+  "name": "赛事直播应急保障",
+  "description": "解析赛事需求后自动生成保障策略，LLM根据策略生成结果路由到网络优化或恢复配置分支",
+  "created_at": "2026-06-01T00:00:00Z",
   "steps": [
     {
       "name": "step1",
       "type": "AllSuccess",
       "subtasks": [
         {
-          "task_id": "6b4f6eef-3d5e-40d1-b702-59a6ee9bcc8f",
-          "description": "负责赛事需求的解析与监控。",
+          "task_id": "task-event-001",
+          "description": "提取赛事路线与业务需求，输出结构化赛事信息",
           "agent": "Live Streaming Agent",
           "skill": "赛事信息解析",
           "status": "pending"
@@ -30,8 +30,8 @@
       "type": "AllSuccess",
       "subtasks": [
         {
-          "task_id": "e9fcec89-3c8c-4e5e-9271-546e767f2dbf",
-          "description": "负责保障策略及其恢复策略的生成。",
+          "task_id": "task-event-002",
+          "description": "根据赛事需求信息，生成保障策略及对应的恢复策略预案",
           "agent": "Assurance Agent",
           "skill": "策略生成",
           "status": "pending"
@@ -40,11 +40,11 @@
       "next": [
         {
           "step": "step3",
-          "condition": "策略生成失败"
+          "condition": "策略生成成功"
         },
         {
           "step": "step4",
-          "condition": "策略生成成功"
+          "condition": "策略生成失败"
         }
       ],
       "layer": 1,
@@ -55,8 +55,8 @@
       "type": "AllSuccess",
       "subtasks": [
         {
-          "task_id": "009af5a5-2bb9-469d-8bb5-39c9b7669584",
-          "description": "负责无线网络的分析、规划与策略执行。",
+          "task_id": "task-event-003",
+          "description": "根据前序步骤输出的保障策略，分析无线网络当前负载，执行网络规划与策略优化",
           "agent": "RAN Agent",
           "skill": "分析评估",
           "status": "pending"
@@ -68,7 +68,7 @@
           "condition": ""
         }
       ],
-      "layer": 0,
+      "layer": 1,
       "context_from": null
     },
     {
@@ -76,8 +76,8 @@
       "type": "AllSuccess",
       "subtasks": [
         {
-          "task_id": "d1ea8852-1a11-4626-a3f2-ada2e88aab4c",
-          "description": "恢复保障前网络配置",
+          "task_id": "task-event-004",
+          "description": "策略生成失败时的应急处理：恢复网络原有配置并下发保底策略",
           "agent": "Assurance Agent",
           "skill": "恢复策略下发",
           "status": "pending"
@@ -95,5 +95,10 @@
   ],
   "related_preflow": null,
   "user_intent": null,
-  "tags": []
+  "tags": [
+    "LiveStreaming",
+    "Conditional",
+    "AutoDerive",
+    "Aggregation"
+  ]
 }

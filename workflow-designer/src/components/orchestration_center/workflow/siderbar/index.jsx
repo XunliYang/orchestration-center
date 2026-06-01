@@ -26,14 +26,15 @@ const Sidebar = ({ isDark }) => {
 
     const onDragStart = (event, agentKey, agentInfo) => {
         const defaultSkill = agentInfo.skills?.[0];
+        const defaultTask = t('workflow.sidebar.defaultTask', { name: agentInfo.name || agentKey });
         const templateData = {
             agent: agentKey,
             skill: defaultSkill?.name || "",
             skillsList: agentInfo.skills || [],
             inputs: {},
             outputs: {},
-            description: agentInfo.description,
-            defaultTask: t('workflow.sidebar.defaultTask', { name: agentInfo.name || agentKey })
+            description: defaultTask,
+            defaultTask,
         };
 
         event.dataTransfer.setData('application/agent-template', JSON.stringify(templateData));
