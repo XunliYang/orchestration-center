@@ -156,12 +156,18 @@
       "placeholderSelect": "请选择技能...",
       "removeSubtask": "移除子任务",
       "layer": "编排层级",
-      "layerHint": "0=执行层(叶子Agent), 1+=聚合层(可汇总下层输出)",
+      "layerExecution": "执行层（叶子Agent）",
+      "layerAggregation": "聚合层（汇总上游输出）",
+      "layerHint": "执行层：仅依据自身任务描述执行。聚合层：额外接收上游步骤的输出作为上下文进行汇总。",
       "contextFrom": "引用前置步骤",
-      "contextFromHint": "未选择时自动从图拓扑推导（流入本节点的步骤）",
-      "contextFromAll": "全选所有已执行步骤 [+]",
+      "contextFromHint": "引擎根据连线自动确定引用哪些前置步骤的输出。",
+      "contextFromHintAuto": "自动推导：引擎根据连线关系确定前置步骤。",
+      "contextFromHintStar": "已选择所有前驱节点（含直连和间接），点击下方可排除特定步骤。",
+      "contextFromHintManual": "手动选择引用步骤，点击下方可增删。",
+      "contextFromHintLayer0": "执行层节点仅依据任务描述执行，不引用上游步骤输出。",
+      "contextFromAll": "所有前驱节点",
       "contextFromAuto": "自动推导（默认）",
-      "contextFromNone": "无需引用(独立执行)"
+      "contextFromNone": "无可用上游步骤"
     },
     "export": {
       "success": "工作流保存成功",

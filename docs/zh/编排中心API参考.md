@@ -604,7 +604,7 @@
 | subtasks    | array[Task]            | 子任务列表，子任务间无依赖，可并行执行                            |
 | next        | array[JumpCondition] \| null | 跳转条件列表，指向下一步骤；空值表示无条件顺序执行              |
 | layer       | integer                | 编排层级：0 = 执行层（叶子 Agent），1+ = 聚合层                  |
-| context_from | array[string] \| null  | 上下文来源步骤列表，`["*"]` 表示包含所有先前步骤的输出；为 null 且 layer > 0 时自动从图拓扑推导 |
+| context_from | array[string] \| null  | 上下文来源步骤列表，`["*"]` 表示包含所有直接前驱（有边流入本节点的步骤）的输出；为 null 且 layer > 0 时自动从图拓扑推导 |
 
 **Task 结构：**
 

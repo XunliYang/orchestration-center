@@ -109,6 +109,16 @@ const PropertyPanel = ({ selectedElement, nodes, edges, setPhenomenon, setNodes,
         updateData('subtasks', newSubtasks, { height: newHeight });
     };
 
+    const handleSubtaskDescChange = (idx, value) => {
+        const d = activeElement?.data || {};
+        if (!d.subtasks) return;
+        const newSubtasks = d.subtasks.map((t, i) => {
+            if (i === idx) return { ...t, description: value };
+            return t;
+        });
+        updateData('subtasks', newSubtasks);
+    };
+
     const handleDelete = () => {
         onDelete();
     }
@@ -146,14 +156,12 @@ const PropertyPanel = ({ selectedElement, nodes, edges, setPhenomenon, setNodes,
             newSubtasks[idx] = {
                 ...task,
                 skill: selectedName,
-                description: selectedSkill.description || task.description
             };
 
             if (newSubtasks.length === 1) {
                 updateData('skill', selectedName);
                 updateData('inputs', parsedInputs);
                 updateData('outputs', parsedOutputs);
-                updateData('description', selectedSkill.description || task.description);
             }
 
             updateData('subtasks', newSubtasks);
@@ -189,8 +197,74 @@ const PropertyPanel = ({ selectedElement, nodes, edges, setPhenomenon, setNodes,
             .map(n => ({ id: n.id, label: n.data?.label || n.id }));
     }, [nodes]);
 
+    const downstreamIds = useMemo(() => {
+        const descendants = new Set();
+        const queue = [activeElement.id];
+        while (queue.length > 0) {
+            const current = queue.shift();
+            for (const edge of edges) {
+                if (edge.source === current && !descendants.has(edge.target)) {
+                    descendants.add(edge.target);
+                    queue.push(edge.target);
+                }
+            }
+        }
+        return descendants;
+    }, [activeElement.id, edges]);
+
+    const directPredecessorIds = useMemo(() => {
+        const preds = new Set();
+        for (const edge of edges) {
+            if (edge.target === activeElement.id) {
+                preds.add(edge.source);
+            }
+        }
+        return preds;
+    }, [activeElement.id, edges]);
+
+    const allPredecessorIds = useMemo(() => {
+        const ancestors = new Set();
+        const queue = [activeElement.id];
+        while (queue.length > 0) {
+            const current = queue.shift();
+            for (const edge of edges) {
+                if (edge.target === current && !ancestors.has(edge.source)) {
+                    ancestors.add(edge.source);
+                    queue.push(edge.source);
+                }
+            }
+        }
+        return ancestors;
+    }, [activeElement.id, edges]);
+
+    const eligibleStepNames = useMemo(() => {
+        return allStepNames.filter(s =>
+            s.id !== activeElement.id && !downstreamIds.has(s.id)
+        );
+    }, [allStepNames, activeElement.id, downstreamIds]);
+
+    const isStarMode = data.context_from && data.context_from[0] === '*';
+
+    const isManualMode = data.context_from && !isStarMode && data.context_from.length > 0;
+
+    const contextHint = useMemo(() => {
+        if (isStarMode) return t('workflow.panel.contextFromHintStar');
+        if (isManualMode) return t('workflow.panel.contextFromHintManual');
+        return t('workflow.panel.contextFromHintAuto');
+    }, [isStarMode, isManualMode, t]);
+
+    const visibleStepNames = useMemo(() => {
+        if (isStarMode) {
+            return eligibleStepNames.filter(s => allPredecessorIds.has(s.id));
+        }
+        return eligibleStepNames;
+    }, [eligibleStepNames, isStarMode, allPredecessorIds]);
+
     const toggleContextFrom = (stepName) => {
-        const current = Array.isArray(data.context_from) ? [...data.context_from] : [];
+        let current = Array.isArray(data.context_from) ? [...data.context_from] : [];
+        if (current.includes('*')) {
+            current = eligibleStepNames.filter(s => allPredecessorIds.has(s.id)).map(s => s.id);
+        }
         if (current.includes(stepName)) {
             const next = current.filter(s => s !== stepName);
             updateData('context_from', next.length > 0 ? next : null);
@@ -297,11 +371,18 @@ const PropertyPanel = ({ selectedElement, nodes, edges, setPhenomenon, setNodes,
                                                     <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
                                                 </div>
                                             </div>
-                                            {task.description && (
-                                                <p className={`text-[12px] mt-1.5 leading-relaxed opacity-70 ${isDark ? 'text-zinc-400' : 'text-slate-600'}`}>
-                                                    {task.description}
-                                                </p>
-                                            )}
+                                            <div className="mt-2">
+                                                <label className={`text-[10px] font-bold uppercase tracking-widest opacity-50 ${isDark ? 'text-zinc-400' : 'text-slate-500'}`}>
+                                                    {t('workflow.panel.taskDesc')}
+                                                </label>
+                                                <input
+                                                    type="text"
+                                                    value={task.description || ''}
+                                                    onChange={(e) => handleSubtaskDescChange(idx, e.target.value)}
+                                                    placeholder={task.defaultTask || ''}
+                                                    className={`w-full mt-0.5 px-2 py-1 text-[12px] rounded-lg border outline-none transition-all ${isDark ? 'bg-zinc-800 border-zinc-700 text-zinc-200 placeholder:text-zinc-600 focus:border-blue-500' : 'bg-white border-zinc-200 text-slate-800 placeholder:text-slate-400 focus:border-blue-400'}`}
+                                                />
+                                            </div>
                                         </div>
                                     ))}
                                 </div>
@@ -319,13 +400,12 @@ const PropertyPanel = ({ selectedElement, nodes, edges, setPhenomenon, setNodes,
                                     {t('workflow.panel.layer')}
                                 </label>
                                 <select
-                                    value={data.layer ?? 0}
+                                    value={data.layer > 0 ? 1 : 0}
                                     onChange={(e) => updateData('layer', parseInt(e.target.value))}
                                     className={`w-full px-3 py-2 text-sm rounded-lg border outline-none transition-all ${isDark ? 'bg-zinc-900 border-zinc-800 text-zinc-200 focus:border-blue-500' : 'bg-zinc-50 border-zinc-200 text-zinc-800 focus:border-blue-400'}`}
                                 >
-                                    <option value={0}>Layer 0 - {t('workflow.panel.layerHint').split(',')[0]}</option>
-                                    <option value={1}>Layer 1 - {t('workflow.panel.layerHint').split(',')[1]}</option>
-                                    <option value={2}>Layer 2</option>
+                                    <option value={0}>{t('workflow.panel.layerExecution')}</option>
+                                    <option value={1}>{t('workflow.panel.layerAggregation')}</option>
                                 </select>
                                 <p className={`text-[11px] opacity-60 ${isDark ? 'text-zinc-500' : 'text-zinc-500'}`}>
                                     {t('workflow.panel.layerHint')}
@@ -337,7 +417,7 @@ const PropertyPanel = ({ selectedElement, nodes, edges, setPhenomenon, setNodes,
                                     {t('workflow.panel.contextFrom')}
                                 </label>
                                 <p className={`text-[11px] opacity-60 ${isDark ? 'text-zinc-500' : 'text-zinc-500'}`}>
-                                    {t('workflow.panel.contextFromHint')}
+                                    {contextHint}
                                 </p>
                                 {data.layer > 0 ? (
                                     <>
@@ -347,7 +427,7 @@ const PropertyPanel = ({ selectedElement, nodes, edges, setPhenomenon, setNodes,
                                                     {t('workflow.panel.contextFromAuto')}
                                                 </span>
                                             )}
-                                            {data.context_from && data.context_from.length > 0 && data.context_from[0] !== '*' && (
+                                            {data.context_from && data.context_from.length > 0 && (
                                                 <button onClick={setContextAuto} className={`px-2.5 py-1 text-[12px] rounded-md border transition-all ${isDark ? 'bg-zinc-800 border-zinc-700 text-zinc-400 hover:border-zinc-500' : 'bg-zinc-100 border-zinc-200 text-zinc-600 hover:border-zinc-400'}`}>
                                                     {t('workflow.panel.contextFromAuto')}
                                                 </button>
@@ -355,7 +435,7 @@ const PropertyPanel = ({ selectedElement, nodes, edges, setPhenomenon, setNodes,
                                             <button
                                                 onClick={setContextAll}
                                                 className={`px-2.5 py-1 text-[12px] rounded-md border transition-all ${
-                                                    data.context_from && data.context_from[0] === '*'
+                                                    isStarMode
                                                         ? (isDark ? 'bg-amber-600 border-amber-500 text-white' : 'bg-amber-500 border-amber-400 text-white')
                                                         : (isDark ? 'bg-zinc-800 border-zinc-700 text-zinc-400 hover:border-zinc-500' : 'bg-zinc-100 border-zinc-200 text-zinc-600 hover:border-zinc-400')
                                                 }`}
@@ -363,10 +443,10 @@ const PropertyPanel = ({ selectedElement, nodes, edges, setPhenomenon, setNodes,
                                                 {t('workflow.panel.contextFromAll')}
                                             </button>
                                         </div>
-                                        {data.context_from && data.context_from[0] !== '*' && (
+                                        {data.context_from && (
                                             <div className="flex flex-wrap gap-1.5">
-                                                {allStepNames.filter(s => s.id !== activeElement.id).map(s => {
-                                                    const isSelected = Array.isArray(data.context_from) && data.context_from.includes(s.id);
+                                                {visibleStepNames.map(s => {
+                                                    const isSelected = isStarMode || (Array.isArray(data.context_from) && data.context_from.includes(s.id));
                                                     return (
                                                         <button
                                                             key={s.id}
@@ -381,7 +461,7 @@ const PropertyPanel = ({ selectedElement, nodes, edges, setPhenomenon, setNodes,
                                                         </button>
                                                     );
                                                 })}
-                                                {allStepNames.filter(s => s.id !== activeElement.id).length === 0 && (
+                                                {visibleStepNames.length === 0 && (
                                                     <span className={`text-[12px] opacity-50 ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>
                                                         {t('workflow.panel.contextFromNone')}
                                                     </span>
@@ -391,7 +471,7 @@ const PropertyPanel = ({ selectedElement, nodes, edges, setPhenomenon, setNodes,
                                     </>
                                 ) : (
                                     <p className={`text-[12px] opacity-50 ${isDark ? 'text-zinc-500' : 'text-zinc-400'}`}>
-                                        ({t('workflow.panel.contextFromHint')})
+                                        {t('workflow.panel.contextFromHintLayer0')}
                                     </p>
                                 )}
                             </div>

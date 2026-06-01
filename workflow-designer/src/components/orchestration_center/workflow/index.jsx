@@ -256,7 +256,7 @@ const FlowInner = ({
             if (!sourceNode || !targetNode) return {
                 ...edge,
                 type: 'custom',
-                style: { ...edge.style, stroke: themeClasses.inactiveEdgeColor, strokeWidth: themeClasses.inactiveEdgeColor, opacity: 0.5 },
+                style: { ...edge.style, stroke: themeClasses.inactiveEdgeColor, strokeWidth: 2, opacity: 0.5 },
                 markerEnd: { type: MarkerType.ArrowClosed, color: themeClasses.inactiveEdgeColor }
             };
 
@@ -394,10 +394,19 @@ const FlowInner = ({
             setEditNodes(importedNodes.map(node => ({ ...node, zIndex: 100, data: { ...node.data, isDark } })));
             setIsDirty(false);
         }
-    }, [importedNodes, setEditNodes, isDark, mode]);
+    }, [importedNodes, setEditNodes, mode]);
 
     useEffect(() => {
-        if (mode === 'edit' && importedEdges) {
+        if (mode === 'edit') {
+            setEditNodes(nds => nds.map(node => ({
+                ...node,
+                data: { ...node.data, isDark }
+            })));
+        }
+    }, [isDark, mode, setEditNodes]);
+
+    useEffect(() => {
+        if (mode === 'edit' && importedEdges?.length > 0) {
             setEditEdges(importedEdges.map(edge => ({
                 ...edge,
                 type: 'custom',
@@ -408,7 +417,16 @@ const FlowInner = ({
             })));
             setIsDirty(false);
         }
-    }, [importedEdges, setEditEdges, mode, isDark]);
+    }, [importedEdges, setEditEdges, mode]);
+
+    useEffect(() => {
+        if (mode === 'edit') {
+            setEditEdges(eds => eds.map(edge => ({
+                ...edge,
+                style: { ...edge.style, stroke: isDark ? '#3b82f6' : '#2563eb' },
+            })));
+        }
+    }, [isDark, mode, setEditEdges]);
 
     // Track changes for isDirty
     const onNodesChangeWithDirty = useCallback((changes) => {

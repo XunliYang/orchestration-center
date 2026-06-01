@@ -1184,3 +1184,73 @@ class TestCrossLayerOrchestration:
             assert "gen" in executed
             assert "on_success" in executed
             assert "on_fail" not in executed
+
+    def test_build_context_star_includes_all_ancestors(self, mock_llm_client):
+        """Test that context_from ['*'] includes ALL ancestors transitively (direct + indirect)"""
+        with patch('orchestrate.runtime.exec_engine.get_llm_instance',
+                   return_value=mock_llm_client):
+            psop = PSOP(
+                name="star_test",
+                steps=[
+                    Step(name="step1", type=StepType.ALL_SUCCESS, layer=0,
+                         subtasks=[Task(description="task1", agent="a1", skill="s1")],
+                         next=[JumpCondition(step="step2", condition=""),
+                               JumpCondition(step="step3", condition="")]),
+                    Step(name="step2", type=StepType.ALL_SUCCESS, layer=0,
+                         subtasks=[Task(description="task2", agent="a2", skill="s2")],
+                         next=[JumpCondition(step="step4", condition="")]),
+                    Step(name="step3", type=StepType.ALL_SUCCESS, layer=0,
+                         subtasks=[Task(description="task3", agent="a3", skill="s3")],
+                         next=[JumpCondition(step="step4", condition="")]),
+                    Step(name="step5", type=StepType.ALL_SUCCESS, layer=0,
+                         subtasks=[Task(description="task5", agent="a5", skill="s5")],
+                         next=None),
+                    Step(name="step4", type=StepType.ALL_SUCCESS, layer=1,
+                         subtasks=[Task(description="summarize", agent="a4", skill="s4")],
+                         context_from=["*"],
+                         next=None),
+                ]
+            )
+            engine = DynamicWorkflowEngine(psop=psop, agent_cards=[])
+            engine.step_outputs = {
+                "step1": {"task1": "result1"},
+                "step2": {"task2": "result2"},
+                "step3": {"task3": "result3"},
+                "step5": {"task5": "result5"},
+            }
+            step4 = psop.steps[4]
+            result = engine._build_context_for_step(step4)
+            assert "step1" in result, "step1 is an indirect ancestor, should be included"
+            assert "step2" in result, "step2 is a direct predecessor, should be included"
+            assert "step3" in result, "step3 is a direct predecessor, should be included"
+            assert "step5" not in result, "step5 is not an ancestor, should NOT be included"
+
+    def test_get_all_predecessors(self, mock_llm_client):
+        """Test _get_all_predecessors returns all ancestors transitively"""
+        with patch('orchestrate.runtime.exec_engine.get_llm_instance',
+                   return_value=mock_llm_client):
+            psop = PSOP(
+                name="ancestor_test",
+                steps=[
+                    Step(name="step1", type=StepType.ALL_SUCCESS, subtasks=[],
+                         next=[JumpCondition(step="step2", condition=""),
+                               JumpCondition(step="step3", condition="")]),
+                    Step(name="step2", type=StepType.ALL_SUCCESS, subtasks=[],
+                         next=[JumpCondition(step="step4", condition="")]),
+                    Step(name="step3", type=StepType.ALL_SUCCESS, subtasks=[],
+                         next=[JumpCondition(step="step4", condition="")]),
+                    Step(name="step4", type=StepType.ALL_SUCCESS, subtasks=[],
+                         next=None),
+                    Step(name="step5", type=StepType.ALL_SUCCESS, subtasks=[],
+                         next=None),
+                ]
+            )
+            engine = DynamicWorkflowEngine(psop=psop, agent_cards=[])
+            ancestors = engine._get_all_predecessors("step4")
+            assert set(ancestors) == {"step1", "step2", "step3"}
+            ancestors = engine._get_all_predecessors("step2")
+            assert ancestors == ["step1"]
+            ancestors = engine._get_all_predecessors("step5")
+            assert ancestors == []
+            ancestors = engine._get_all_predecessors("step1")
+            assert ancestors == []

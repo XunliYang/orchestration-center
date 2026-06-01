@@ -1,0 +1,89 @@
+{
+  "id": "psop_cross_city_fault",
+  "name": "跨地市故障并行诊断",
+  "description": "向多个地市的SPN故障诊断Agent并行下发指令，任一地市返回结果即可推进汇总分析",
+  "created_at": "2026-06-01T00:00:00Z",
+  "steps": [
+    {
+      "name": "step1",
+      "type": "AllSuccess",
+      "subtasks": [
+        {
+          "task_id": "task-spn-001",
+          "description": "向多个地市SPN故障处理Agent同时下发专线故障诊断指令",
+          "agent": "Transport Workbench Agent",
+          "skill": "下发专线诊断",
+          "status": "pending"
+        }
+      ],
+      "next": [
+        {
+          "step": "step2",
+          "condition": "诊断指令下发成功"
+        }
+      ],
+      "layer": 0,
+      "context_from": null
+    },
+    {
+      "name": "step2",
+      "type": "AnySuccess",
+      "subtasks": [
+        {
+          "task_id": "task-spn-002a",
+          "description": "对地市1的SPN专线进行故障诊断，输出诊断结果",
+          "agent": "SPN Fault Handling Agent City1 OMC",
+          "skill": "专线故障诊断",
+          "status": "pending"
+        },
+        {
+          "task_id": "task-spn-002b",
+          "description": "对地市2的SPN专线进行故障诊断，输出诊断结果",
+          "agent": "SPN Fault Handling Agent City2 OMC",
+          "skill": "专线故障诊断",
+          "status": "pending"
+        }
+      ],
+      "next": [
+        {
+          "step": "step3",
+          "condition": "至少一个地市完成诊断"
+        }
+      ],
+      "layer": 0,
+      "context_from": null
+    },
+    {
+      "name": "step3",
+      "type": "AllSuccess",
+      "subtasks": [
+        {
+          "task_id": "task-spn-003",
+          "description": "收集并汇总各地市SPN Agent的诊断结果，综合分析生成最终报告",
+          "agent": "Transport Workbench Agent",
+          "skill": "汇总分析",
+          "status": "pending"
+        }
+      ],
+      "next": [
+        {
+          "step": "end",
+          "condition": "报告生成完成"
+        }
+      ],
+      "layer": 1,
+      "context_from": [
+        "*"
+      ]
+    }
+  ],
+  "related_preflow": null,
+  "user_intent": null,
+  "tags": [
+    "SPN",
+    "FaultHandling",
+    "AnySuccess",
+    "FanOut",
+    "Aggregation"
+  ]
+}

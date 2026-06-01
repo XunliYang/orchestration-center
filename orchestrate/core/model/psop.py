@@ -66,16 +66,21 @@ class Step(BaseModel):
     next: Optional[List[JumpCondition]] = Field(None,
                                                 description="Jump conditions to next steps. List of jump \
                                                 conditions (if empty, unconditional jump)")
-    layer: int = Field(0, description="Orchestration layer level. 0 = execution layer (leaf agents), "
-                                      "1+ = aggregation layers. If layer > 0 and context_from is not set, "
+    layer: int = Field(0, description="Orchestration layer. 0 = execution layer (leaf agent, runs independently). "
+                                      "1 = aggregation layer (summarizes upstream outputs). "
+                                      "Values > 1 are treated identically to 1. "
+                                      "If layer > 0 and context_from is not set, "
                                       "the engine automatically derives predecessors from the graph topology "
                                       "(steps whose 'next' points to this step).")
     context_from: Optional[List[str]] = Field(None,
                                               description="List of step names whose outputs should be provided as "
                                                           "context to this step's agents. "
-                                                          "Use ['*'] to include ALL previously executed steps. "
-                                                          "If None and layer > 0, predecessors are auto-derived "
-                                                          "from graph edges (steps with 'next' pointing to this step).")
+                                                          "Use ['*'] to include ALL predecessors transitively "
+                                                          "(direct + indirect, every ancestor in the DAG). "
+                                                          "If None and layer > 0, only direct predecessors "
+                                                          "are auto-derived from graph edges. "
+                                                          "At runtime the engine respects conditional branches: "
+                                                          "only outputs from steps that actually executed are included.")
 
 
 class PSOP(BaseModel):
