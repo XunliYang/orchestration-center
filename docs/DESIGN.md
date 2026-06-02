@@ -295,13 +295,13 @@ etc/conf/llm_config.json   (LLM 提供商配置)
 
 ### 7.2 关键配置项
 
-| Key | 说明 | 默认值 |
-|-----|------|--------|
-| `persistence_mode` | 存储模式: `file` 或 `postgresql` | `file` |
-| `ip` / `port` | 绑定的 IP 和端口 | `0.0.0.0` / `60000` |
-| `agent_registry_url` | Agent 注册中心地址 | `http://127.0.0.1:8898` |
-| `enable_https` | 是否启用 HTTPS | `false` |
-| `forwarded_allow_ips` | 反向代理信任的 IP | `*` |
+| Key | 说明 | 默认值                     |
+|-----|------|-------------------------|
+| `persistence_mode` | 存储模式: `file` 或 `postgresql` | `file`                  |
+| `ip` / `port` | 绑定的 IP 和端口 | `0.0.0.0` / `60000`     |
+| `agent_registry_url` | Agent 注册中心地址 | `http://127.0.0.1:5000` |
+| `enable_https` | 是否启用 HTTPS | `false`                 |
+| `forwarded_allow_ips` | 反向代理信任的 IP | `*`                     |
 
 ### 7.3 设计要点
 
