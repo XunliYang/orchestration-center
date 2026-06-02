@@ -15,6 +15,7 @@
 
 import asyncio
 import time
+from pathlib import Path
 
 from loguru import logger
 
@@ -71,7 +72,7 @@ def _get_and_validate_preflow():
 
 
 def _load_agents_and_get_cards():
-    agent_lib = AgentCardLoader()
+    agent_lib = AgentCardLoader(Path(__file__).parent / "agentcard")
     return agent_lib.get_all_agent_cards()
 
 def _generate_workflow(preflow, agent_cards):

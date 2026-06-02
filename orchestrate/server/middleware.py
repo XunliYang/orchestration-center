@@ -78,7 +78,7 @@ class TimeoutMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next):
         for sse_path in self._SSE_PATHS:
-            if sse_path in request.url.path:
+            if request.url.path.endswith(sse_path):
                 return await call_next(request)
         try:
             response = await asyncio.wait_for(call_next(request), timeout=self.timeout_seconds)
@@ -96,7 +96,7 @@ sync_storage = storage.MemoryStorage()
 limiter = strategies.MovingWindowRateLimiter(sync_storage)
 
 
-def parser_rate_lime(interface_name: str, config):
+def parse_rate_limit(interface_name: str, config):
     config_map = {
         "parse_pdf":(FLOW_CTL_PARSE_PDF, 50),
         "plan":(FLOW_CTL_PLAN, 50),
@@ -152,7 +152,7 @@ async def async_hit(rate_item, *identifiers: str, cost=1):
 
 class RateLimiter:
     def __init__(self, config, interface_name: str = None):
-        self.rate_item = parser_rate_lime(interface_name, config)
+        self.rate_item = parse_rate_limit(interface_name, config)
         if not self.rate_item:
             raise ValueError("Invalid rate limit configuration")
 

@@ -21,9 +21,9 @@ import { SmartStepEdge } from '@tisoap/react-flow-smart-edge';
 import FloatingEdge from "./CustomEdges/FloatingEdge/index.jsx";
 import Toolbar from "./toolbar/index.jsx";
 import ToolbarLite from "./toolbar_lite/index.jsx";
-import WorkflowLoader from "./loading/index.tsx";
+import WorkflowLoader from "./loading/index.jsx";
 import PropertyPanel from "./property_panel/index.jsx";
-import Sidebar from "./siderbar/index.jsx";
+import Sidebar from "./sidebar/index.jsx";
 import { normalizeStatus, BACKEND_STATUS } from './utils/index.jsx';
 
 
@@ -387,6 +387,7 @@ const FlowInner = ({
     const [selectedElement, setSelectedElement] = useState(null);
     const [isDirty, setIsDirty] = useState(false);
     const [showExitConfirm, setShowExitConfirm] = useState(false);
+    const [phenomenon, setPhenomenon] = useState('');
 
     useEffect(() => {
         if (mode === 'edit' && importedNodes?.length > 0) {
@@ -478,7 +479,7 @@ const FlowInner = ({
     }, [selectedElement, editNodes, setEditNodes, setEditEdges]);
 
     const onNodeDragStop = useCallback((event, node) => {
-        if (mode !== 'edit' || node.type !== 'agentNode' || !rfInstance) return;
+        if (mode !== 'edit' || !node || node.type !== 'agentNode' || !rfInstance) return;
 
         const allNodes = rfInstance.getNodes();
         const targetNode = allNodes.find(n => {
