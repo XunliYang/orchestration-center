@@ -70,11 +70,16 @@ class ConnectionLimitMiddleware(BaseHTTPMiddleware):
 
 
 class TimeoutMiddleware(BaseHTTPMiddleware):
+    _SSE_PATHS = {"/execute", "/api/v1/orchestrate/execute"}
+
     def __init__(self, app, timeout_seconds: int):
         super().__init__(app)
         self.timeout_seconds = timeout_seconds
 
     async def dispatch(self, request: Request, call_next):
+        for sse_path in self._SSE_PATHS:
+            if sse_path in request.url.path:
+                return await call_next(request)
         try:
             response = await asyncio.wait_for(call_next(request), timeout=self.timeout_seconds)
             return response
@@ -152,7 +157,7 @@ class RateLimiter:
             raise ValueError("Invalid rate limit configuration")
 
     async def __call__(self, request: Request):
-        identifier = request.client.host
+        identifier = request.client.host if request.client else "unknown"
         if not await async_hit(self.rate_item, identifier):
             raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Too many requests")
         return True
