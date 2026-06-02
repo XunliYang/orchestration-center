@@ -44,8 +44,10 @@ class ConnectionLimitMiddleware(BaseHTTPMiddleware):
                 return JSONResponse(
                     status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                     content={
-                        "code": status.HTTP_503_SERVICE_UNAVAILABLE,
-                        "message": f"The server is at maximum connection capacity. ({self.max_connections})"
+                        "code": 503,
+                        "message": f"The server is at maximum connection capacity. ({self.max_connections})",
+                        "status": "error",
+                        "data": None,
                     }
                 )
             self.active_connections += 1
@@ -87,8 +89,10 @@ class TimeoutMiddleware(BaseHTTPMiddleware):
             logger.error(f"Requests processing timeout. ({self.timeout_seconds} seconds)")
             return JSONResponse(status_code=status.HTTP_504_GATEWAY_TIMEOUT,
                                 content={
-                                    "code": status.HTTP_504_GATEWAY_TIMEOUT,
-                                    "message": f"Requests processing timeout. ({self.timeout_seconds} seconds)"
+                                    "code": 504,
+                                    "message": f"Requests processing timeout. ({self.timeout_seconds} seconds)",
+                                    "status": "error",
+                                    "data": None,
                                 })
 
 
@@ -123,6 +127,7 @@ def parse_rate_limit(interface_name: str, config):
         "ext_execute_by_id":(FLOW_CTL_START_PROCESS_STREAM, 50),
         "list_agents":(FLOW_CTL_AGENT_CARDS, 50),
         "get_execution":(FLOW_CTL_ONE_PSOP, 50),
+        "list_executions":(FLOW_CTL_ALL_PSOPS, 50),
         "start_process_stream":(FLOW_CTL_START_PROCESS_STREAM, 50),
     }
 

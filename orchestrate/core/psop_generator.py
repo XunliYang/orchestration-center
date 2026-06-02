@@ -266,10 +266,14 @@ class PsopGenerator:
             }
             step_list = []
             missing_skills = []
+            unmatched_actions = []
             for action, skill_name in action_skill_pair.items():
                 if skill_name not in skill_dict:
                     logger.warning(f"Skill '{skill_name}' not found in any agent's skill list")
-                    missing_skills.append(skill_name)
+                    if skill_name == "none":
+                        unmatched_actions.append(action)
+                    else:
+                        missing_skills.append(skill_name)
                     continue
                 step_list.append({
                     'task': action,
@@ -279,6 +283,10 @@ class PsopGenerator:
             if missing_skills:
                 raise WorkflowGeneratorError(
                     f"Skills not found in any agent: {', '.join(missing_skills)}"
+                )
+            if unmatched_actions:
+                raise WorkflowGeneratorError(
+                    f"No matching agent found for tasks: {', '.join(unmatched_actions)}"
                 )
             if not step_list:
                 raise WorkflowGeneratorError("No valid tasks generated from PSOP")

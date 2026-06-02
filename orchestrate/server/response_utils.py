@@ -32,6 +32,10 @@ def created(data: Any = None, message: str = "created") -> dict:
     return {"code": 201, "message": message, "status": "success", "data": data}
 
 
+def error(code: int, message: str, data: Any = None) -> dict:
+    return {"code": code, "message": message, "status": "error", "data": data}
+
+
 async def get_agent_cards() -> List[AgentCard]:
     factory = AgentRegistryClientFactory()
     client = factory.create_from_env()

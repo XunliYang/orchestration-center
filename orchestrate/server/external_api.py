@@ -22,9 +22,11 @@ Provides SOP-based orchestration, intent-based orchestration, workflow search, a
 Endpoints:
   POST /api/v1/orchestrate/sop           — SOP-based orchestration (JSON text or PDF/TXT/MD file upload)
   POST /api/v1/orchestrate/intent        — Intent-based orchestration
+  GET  /api/v1/orchestrate/psop/{id}     — Get PSOP workflow by ID
   POST /api/v1/orchestrate/search        — Search/retrieve workflows by natural language intent
   POST /api/v1/orchestrate/execute       — Auto-orchestrate + execute (SSE)
   GET  /api/v1/orchestrate/execute/{id}  — Execute a known PSOP (SSE)
+  GET  /api/v1/executions                — List execution records
   GET  /api/v1/executions/{id}           — Get execution result
 """
 
@@ -66,22 +68,22 @@ intent_semaphore = anyio.Semaphore(int(config.get(FLOW_CTL_GENERATE_PSOP, 10)))
 # ═══════════════════════════════════════════════════════════════════════════════
 
 class SOPOrchestrateRequest(BaseModel):
-    sop_content: str = Field(..., description="Natural language SOP steps (markdown text)")
-    name: Optional[str] = Field(None, description="Optional workflow name")
+    sop_content: str = Field(..., min_length=1, max_length=50000, description="Natural language SOP steps (markdown text)")
+    name: Optional[str] = Field(None, max_length=256, description="Optional workflow name")
 
 
 class IntentOrchestrateRequest(BaseModel):
-    intent: str = Field(..., min_length=1, description="Natural language intent or task description")
-    name: Optional[str] = Field(None, description="Optional workflow name")
+    intent: str = Field(..., min_length=1, max_length=10000, description="Natural language intent or task description")
+    name: Optional[str] = Field(None, max_length=256, description="Optional workflow name")
 
 
 class ExecuteRequest(BaseModel):
-    task: str = Field(..., description="Task description. System will search existing PSOPs first, auto-generate if none found")
-    name: Optional[str] = Field(None, description="Optional workflow name for auto-generation")
+    task: str = Field(..., min_length=1, max_length=10000, description="Task description. System will search existing PSOPs first, auto-generate if none found")
+    name: Optional[str] = Field(None, max_length=256, description="Optional workflow name for auto-generation")
 
 
 class SearchRequest(BaseModel):
-    intent: str = Field(..., description="Natural language intent to search for matching workflows")
+    intent: str = Field(..., min_length=1, max_length=10000, description="Natural language intent to search for matching workflows")
     top_n: Optional[int] = Field(5, description="Maximum number of results to return", ge=1, le=20)
 
 
@@ -120,9 +122,9 @@ async def orchestrate_sop(
         if "application/json" in content_type:
             try:
                 raw_body = await request.json()
-                body = SOPOrchestrateRequest.model_validate(raw_body)
-            except Exception as e:
-                logger.debug(f"JSON body parsing skipped (form upload assumed): {e}")
+            except Exception:
+                raise HTTPException(status_code=400, detail="Invalid JSON body")
+            body = SOPOrchestrateRequest.model_validate(raw_body)
 
         if file:
             filename = file.filename or ""
@@ -235,7 +237,34 @@ async def orchestrate_intent(
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# 3. Search/retrieve workflows
+# 3. Workflow retrieval
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@router.get("/orchestrate/psop/{psop_id}")
+async def get_psop(
+    psop_id: str,
+    _: Any = Depends(RateLimiter(config, "get_workflow"))
+):
+    """
+    Get a single PSOP workflow by ID (full detail).
+
+    Returns the complete PSOP including all steps, tasks, and conditions.
+    """
+    try:
+        retrieval = WorkflowRetrieval(get_workflow_storage())
+        psop = retrieval.get_psop_by_id(psop_id)
+        if not psop:
+            raise HTTPException(status_code=404, detail=f"PSOP {psop_id} not found")
+        return ok(data=psop.model_dump(), message=f"PSOP {psop_id} retrieved")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get PSOP: {e}")
+        raise HTTPException(status_code=500, detail="Failed to get PSOP")
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# 4. Search/retrieve workflows
 # ═══════════════════════════════════════════════════════════════════════════════
 
 @router.post("/orchestrate/search")
@@ -261,7 +290,7 @@ async def search_workflows(
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# 4. Auto-orchestrate + execute (composite)
+# 5. Auto-orchestrate + execute (composite)
 # ═══════════════════════════════════════════════════════════════════════════════
 
 @router.post("/orchestrate/execute")
@@ -304,13 +333,18 @@ async def execute_workflow(
         return await run_psop_sse(psop, agent_cards, runtime_intent=body.task, lang=lang)
     except anyio.WouldBlock:
         raise HTTPException(status_code=503, detail="Server is busy")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Execution failed: {e}")
+        raise HTTPException(status_code=500, detail="Workflow execution failed")
     finally:
         if acquired:
             execute_semaphore.release()
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# 5. Execute known PSOP
+# 6. Execute known PSOP
 # ═══════════════════════════════════════════════════════════════════════════════
 
 @router.get("/orchestrate/execute/{psop_id}")
@@ -337,14 +371,40 @@ async def execute_psop_by_id(
         return await run_psop_sse(psop, await get_agent_cards(), runtime_intent=user_intent, lang=lang)
     except anyio.WouldBlock:
         raise HTTPException(status_code=503, detail="Server is busy")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Execution by ID failed: {e}")
+        raise HTTPException(status_code=500, detail="Workflow execution failed")
     finally:
         if acquired:
             execute_semaphore.release()
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# 6. Execution result
+# 7. Execution records
 # ═══════════════════════════════════════════════════════════════════════════════
+
+@router.get("/executions")
+async def list_executions(
+    _: Any = Depends(RateLimiter(config, "list_executions"))
+):
+    """
+    List execution records (summary only).
+
+    Returns execution records sorted by start time descending.
+    Each record includes: execution_id, psop_id, psop_name, status, timestamps.
+    """
+    try:
+        handler = HandlerRegistry.get_handler(InterfaceType.LIST_EXECUTION_RECORDS)
+        records = handler.handle()
+        return ok(data=records, message=f"Found {len(records)} execution record(s)")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to list execution records: {e}")
+        raise HTTPException(status_code=500, detail="Failed to list execution records")
+
 
 @router.get("/executions/{execution_id}")
 async def get_execution(
@@ -354,8 +414,14 @@ async def get_execution(
     """
     Get execution result by execution ID.
     """
-    handler = HandlerRegistry.get_handler(InterfaceType.GET_EXECUTION_RECORD)
-    record = handler.handle(execution_id)
-    if not record:
-        raise HTTPException(status_code=404, detail=f"Execution {execution_id} not found")
-    return ok(data=record.model_dump() if hasattr(record, 'model_dump') else record)
+    try:
+        handler = HandlerRegistry.get_handler(InterfaceType.GET_EXECUTION_RECORD)
+        record = handler.handle(execution_id)
+        if not record:
+            raise HTTPException(status_code=404, detail=f"Execution {execution_id} not found")
+        return ok(data=record.model_dump() if hasattr(record, 'model_dump') else record)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get execution record: {e}")
+        raise HTTPException(status_code=500, detail="Failed to get execution record")

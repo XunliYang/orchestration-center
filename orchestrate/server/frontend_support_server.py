@@ -27,6 +27,7 @@ from a2a.types import AgentCard
 from fastapi import FastAPI, APIRouter, UploadFile, File, HTTPException, Request, Depends, Query
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.exceptions import RequestValidationError
 from google.protobuf.json_format import Parse, MessageToDict
 from loguru import logger
 from pydantic import BaseModel, Field
@@ -44,7 +45,7 @@ from common.config import (
 from common.custom.default_handle import HandlerRegistry
 from common.custom.interface_type import InterfaceType
 from orchestrate.server.sse_executor import run_psop_sse
-from orchestrate.server.response_utils import ok, created, get_agent_cards
+from orchestrate.server.response_utils import ok, created, error, get_agent_cards
 from common.log.audit_logger import audit_logger, OperationObject, OperationName, LogLevel, OperationResult
 from common.util.config_util import get_conf
 from orchestrate.core.model.preflow import PreFlow
@@ -73,6 +74,26 @@ app.add_middleware(ConnectionLimitMiddleware, max_connections=int(config.get(CON
 app.add_middleware(TimeoutMiddleware, timeout_seconds=int(config.get(CONN_TIMEOUT, 300)))
 
 
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    return JSONResponse(
+        status_code=exc.status_code,
+        content=error(exc.status_code, exc.detail),
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    messages = []
+    for err in exc.errors():
+        field = ".".join(str(loc) for loc in err["loc"])
+        messages.append(f"{field}: {err['msg']}")
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        content=error(422, "; ".join(messages)),
+    )
+
+
 @app.middleware("http")
 async def logging_middleware(request: Request, call_next):
     request_id = str(uuid.uuid4())[:8]
@@ -87,6 +108,7 @@ async def logging_middleware(request: Request, call_next):
         duration = time.time() - start_time
         logger.info(f"[{request_id}] <-- {request.method} {request.url.path} "
                     f"status={response.status_code} duration={duration:.3f}s")
+        response.headers["X-Request-ID"] = request_id
         return response
     except Exception as e:
         duration = time.time() - start_time

@@ -26,11 +26,14 @@
   | status    | string   | 响应状态，成功为 `"success"`              |
   | data      | object   | 响应数据，具体结构参见各接口              |
 
-  错误响应（HTTPException）格式：
+  错误响应统一格式（与成功响应一致）：
 
-  | 参数名称 | 类型    | 描述         |
-  |----------|---------|--------------|
-  | detail   | string  | 错误描述信息 |
+  | 参数名称 | 类型    | 描述                                        |
+  |----------|---------|---------------------------------------------|
+  | code     | integer | HTTP 状态码（如 400、404、422、500）        |
+  | message  | string  | 错误描述信息                                 |
+  | status   | string  | `"error"`                                    |
+  | data     | object  | `null`                                       |
 
 ### 约束与限制
 
@@ -324,7 +327,6 @@
                 "description": "自动化网络故障定位与根因分析工作流",
                 "tags": ["网络", "故障", "诊断"],
                 "created_at": "2026-05-20T09:15:00.000000",
-                "score": 0.95,
                 "user_intent": "帮我分析网络中断原因",
                 "related_preflow": null
             },
@@ -335,7 +337,6 @@
                 "description": "SPN设备故障检测与恢复流程",
                 "tags": ["SPN", "故障", "恢复"],
                 "created_at": "2026-05-18T14:30:00.000000",
-                "score": 0.82,
                 "user_intent": "SPN故障定位和处理",
                 "related_preflow": null
             }
@@ -348,6 +349,119 @@
     | 状态码 | 说明                  |
     |--------|-----------------------|
     | 500    | LLM 检索调用失败      |
+
+---
+
+## 3.5 获取工作流详情
+
+- 典型场景
+
+  通过检索接口获取工作流 ID 后，获取该工作流的完整详情。
+
+- 功能描述
+
+  根据 PSOP ID 获取完整工作流定义。返回所有步骤（step）、任务（subtask）、跳转条件（next condition）等细节。
+
+- 接口约束
+
+  - 限流标识：`get_workflow`，速率由 `FLOW_CTL_ONE_PSOP` 配置决定。
+
+- 调用方法
+
+  GET
+
+- URI
+
+  `/api/v1/orchestrate/psop/{psop_id}`
+
+- 请求参数
+
+  | 参数名  | 类型   | 必填 | 位置 | 描述                |
+  |--------|--------|------|------|---------------------|
+  | psop_id | string | 是   | path | PSOP 工作流唯一标识  |
+
+- 请求示例
+
+  ```
+  GET /api/v1/orchestrate/psop/06cb53d9-de27-4adf-9898-2eae5afcf888
+  ```
+
+- 返回参数（data 字段）
+
+  详见 [PSOP 数据结构](#附录a-psop-数据结构)。
+
+- 错误码
+
+  | 状态码 | 说明                  |
+  |--------|-----------------------|
+  | 404    | 指定 ID 的工作流不存在 |
+  | 500    | 服务器内部错误         |
+
+---
+
+## SSE 事件类型说明
+
+以下执行接口（`POST /orchestrate/execute`、`GET /orchestrate/execute/{psop_id}`）通过 SSE（Server-Sent Events）实时推送执行进度。每条 SSE 消息格式为：
+
+```
+data: {"type": "<事件类型>", "data": {<事件数据>}, "timestamp": <时间戳>}
+```
+
+### 事件类型一览
+
+| 事件类型         | 说明 | 触发时机 | data 字段关键内容 |
+|-----------------|------|----------|-------------------|
+| `init`          | 引擎初始化完成 | 执行开始时 | `psop_id` — 工作流 ID |
+| `start`         | 流程开始执行 | init 之后 | `psop_id`, `message` |
+| `agent_request` | 向 Agent 发送任务 | 每步开始时 | `agent` — 目标 agent 名, `request` — protobuf 格式的请求体 |
+| `agent_response`| Agent 返回结果 | 每步完成时 | `agent` — 来源 agent 名, `response` — protobuf 格式的响应体 |
+| `psop_update`   | 工作流状态更新 | 每步完成后 | `psop` — 完整 PSOP JSON（含各任务 status: pending/success/failed） |
+| `complete`      | 工作流执行完成 | 所有步骤完成后 | `psop_id`, `execution_history` — 步骤级执行历史 |
+| `error`         | 执行异常 | 执行失败或取消时 | `psop_id`, `error` — 错误描述 |
+| `close`         | SSE 连接关闭 | complete/error 之后 | 空 `{}` |
+
+### SSE 事件推送示例
+
+**正常流程序列：**
+```
+init → start → agent_request → agent_response → psop_update
+  → agent_request → agent_response → psop_update
+  → ... (每步重复) ...
+  → complete → close
+```
+
+**错误中断序列：**
+```
+init → start → ... → error → close
+```
+
+### 解析示例（Python）
+
+```python
+import requests, json
+resp = requests.get(
+    "http://127.0.0.1:60000/api/v1/orchestrate/execute/{psop_id}?lang=zh",
+    stream=True,
+)
+for line in resp.iter_lines(decode_unicode=True):
+    if not line or not line.startswith("data: "):
+        continue
+    event = json.loads(line[6:])
+    etype = event["type"]
+    if etype == "agent_request":
+        print(f"→ {event['data']['agent']}")
+    elif etype == "agent_response":
+        print(f"← {event['data']['agent']}")
+    elif etype == "psop_update":
+        psop = event["data"].get("psop", {})
+        if isinstance(psop, str):
+            psop = json.loads(psop)
+        for step in psop.get("steps", []):
+            print(f"  {step['name']}: {[t['status'] for t in step['subtasks']]}")
+    elif etype in ("complete", "error"):
+        print(f"[{etype}]")
+        break
+```
 
 ---
 
@@ -504,7 +618,77 @@
 
 ---
 
-## 6. 查询执行结果接口
+## 6. 查询执行记录列表
+
+- 典型场景
+
+  获取历史执行记录的摘要列表，用于监控或排查历史执行情况。
+
+- 功能描述
+
+  返回按时间倒序排列的执行记录摘要，每条包含执行 ID、关联的 PSOP 信息、状态和时间戳。不包含完整的 events 和 execution_history 细节。
+
+- 接口约束
+
+  - 限流标识：`list_executions`，速率由 `FLOW_CTL_ALL_PSOPS` 配置决定。
+
+- 调用方法
+
+  GET
+
+- URI
+
+  `/api/v1/executions`
+
+- 请求参数
+
+  无。
+
+- 请求示例
+
+  ```
+  GET /api/v1/executions
+  ```
+
+- 返回参数（data 字段）
+
+  | 参数名        | 类型      | 描述                           |
+  |--------------|-----------|--------------------------------|
+  |              | array     | 执行记录摘要列表               |
+  | execution_id | string    | 执行记录唯一标识               |
+  | psop_id      | string    | 关联的 PSOP ID                 |
+  | psop_name    | string    | 关联的 PSOP 名称               |
+  | started_at   | string    | 开始时间（ISO 8601）           |
+  | completed_at | string    | 完成时间（ISO 8601）           |
+  | status       | string    | 执行状态: success, failed, stopped |
+  | step_count   | integer   | 执行的步骤数                   |
+  | error        | string    | 错误信息（如有）               |
+
+- 返回示例
+
+  ```json
+  {
+      "code": 200,
+      "message": "Found 2 execution record(s)",
+      "status": "success",
+      "data": [
+          {
+              "execution_id": "7273ca6b-e75f-4a69-a645-b8bb59a3e622",
+              "psop_id": "8598d5ee-56bc-4fd9-a039-865ec0137cc8",
+              "psop_name": "基站节能闭环",
+              "started_at": "2026-06-02T07:01:03.994Z",
+              "completed_at": "2026-06-02T07:01:25.492Z",
+              "status": "success",
+              "step_count": 4,
+              "error": null
+          }
+      ]
+  }
+  ```
+
+---
+
+## 7. 查询执行结果详情
 
 - 典型场景
 
