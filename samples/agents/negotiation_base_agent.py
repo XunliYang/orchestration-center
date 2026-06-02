@@ -24,8 +24,9 @@ from loguru import logger
 from a2a_t.server import A2ATServer
 from a2a_t.negotiation.common.enums import NegotiationType
 from a2a_t.negotiation.common.models import StartNegotiationInput, NegotiationContext
+
+from common.a2at_config import get_a2at_env_path
 from common.llm import get_llm_instance
-from samples.a2at_config import get_a2at_env_path
 from samples.negotiation_utils import (
     NEGOTIATION_CONTEXT_KEY,
     NEGOTIATION_TEXT_KEY,
