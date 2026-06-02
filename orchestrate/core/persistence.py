@@ -344,17 +344,10 @@ class WorkflowStorage:
             return False
 
     def _init_storage(self) -> None:
-        """
-        Initialize storage directories.
-        """
         self.psop_dir.mkdir(parents=True, exist_ok=True)
         self.preflow_dir.mkdir(parents=True, exist_ok=True)
         self.execution_dir.mkdir(parents=True, exist_ok=True)
-        logger.info(f"PSOP storage initialized at : {self.psop_dir}")
-        self.preflow_dir.mkdir(parents=True, exist_ok=True)
-        logger.info(f"Preflow storage initialized at : {self.preflow_dir}")
-        self.execution_dir.mkdir(parents=True, exist_ok=True)
-        logger.info(f"Execution record storage initialized at : {self.execution_dir}")
+        logger.info(f"Storage initialized at: psop={self.psop_dir}, preflow={self.preflow_dir}, execution={self.execution_dir}")
 
     def _get_save_path(self, workflow_id: str, workflow_type: str) -> Path:
         if not re.match(r'^[\w\-]+$', workflow_id):

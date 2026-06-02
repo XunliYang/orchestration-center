@@ -265,23 +265,25 @@ const LogEntry = React.memo(({ event, isDark, t, isSelected }) => {
         if (typeof parsed === 'string') return parsed;
         if (typeof parsed !== 'object') return String(parsed);
 
-        const findText = (obj) => {
+        const findText = (obj, seen = new WeakSet()) => {
             if (!obj || typeof obj !== 'object') return typeof obj === 'string' ? [obj] : [];
-            if (Array.isArray(obj)) return obj.flatMap(findText);
+            if (seen.has(obj)) return [];
+            seen.add(obj);
+            if (Array.isArray(obj)) return obj.flatMap(item => findText(item, seen));
 
             let results = [];
             if (obj.text && typeof obj.text === 'string') results.push(obj.text);
             if (obj.message && typeof obj.message === 'string') results.push(obj.message);
 
             if (results.length === 0) {
-                if (obj.parts) results = results.concat(findText(obj.parts));
-                if (obj.artifacts) results = results.concat(findText(obj.artifacts));
+                if (obj.parts) results = results.concat(findText(obj.parts, seen));
+                if (obj.artifacts) results = results.concat(findText(obj.artifacts, seen));
             }
 
             if (results.length === 0) {
                 Object.keys(obj).forEach(key => {
                     if (typeof obj[key] === 'object' && obj[key] !== null) {
-                        results = results.concat(findText(obj[key]));
+                        results = results.concat(findText(obj[key], seen));
                     }
                 });
             }

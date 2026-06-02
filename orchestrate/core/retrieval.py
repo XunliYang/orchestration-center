@@ -218,7 +218,7 @@ class WorkflowRetrieval:
 
             return selected_names[:top_n]
         except Exception as e:
-            raise Exception(f"Failed to retrieve PSOP by intent: {e}")
+            raise Exception(f"Failed to retrieve PSOP by intent: {e}") from e
 
     def retrieve_psop_by_intent(self, user_intent: str) -> Optional[PSOP]:
         logger.info(f"[Retrieval] retrieve_psop_by_intent: intent='{user_intent[:100]}...'")
@@ -234,7 +234,7 @@ class WorkflowRetrieval:
                 return self._load_psop_by_id(psop_id)
             return None
         except Exception as e:
-            raise Exception(f"Failed to retrieve PSOP by intent: {e}")
+            raise Exception(f"Failed to retrieve PSOP by intent: {e}") from e
 
     def retrieve_psop_by_intent_topn(
         self, user_intent: str, top_n: int = 5

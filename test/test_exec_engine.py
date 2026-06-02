@@ -796,25 +796,25 @@ class TestEdgeCases:
             assert results == {}
 
     @pytest.mark.asyncio
-    async def test_llm_decision_with_special_characters(self, sample_step, mock_llm_client):
-        """Test LLM decision handling special characters"""
+    async def test_llm_decision_rejects_undeclared_next(self, sample_step, mock_llm_client):
+        """Test LLM decision rejects step names not in declared next conditions"""
         with patch('orchestrate.runtime.exec_engine.get_llm_instance',
                    return_value=mock_llm_client):
             psop = MagicMock()
             psop.steps = [sample_step, Step(
-                name="step-2_with.special",
+                name="step2",
                 type=StepType.ALL_SUCCESS,
                 subtasks=[],
                 next=[JumpCondition(step="end", condition="energy saving success")]
             )]
             engine = DynamicWorkflowEngine(psop=psop, agent_cards=[])
 
-            # Returns step name with special characters
-            mock_llm_client.ask_llm.return_value = ("id", "step-2_with.special")
+            # LLM returns a step NOT in sample_step.next → should fall back to "end"
+            mock_llm_client.ask_llm.return_value = ("", "step-2_with.special")
 
             result = await engine._llm_route_decision(sample_step, {"skill": "ok"})
 
-            assert result == "step-2_with.special"
+            assert result == "end"
 
     @pytest.mark.asyncio
     async def test_push_event_callback_exception_not_propagated(self, sample_psop, mock_agent_card, mock_llm_client):

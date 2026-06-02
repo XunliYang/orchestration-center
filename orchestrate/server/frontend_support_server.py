@@ -164,6 +164,8 @@ async def list_workflows(
         return ok(data=[wf.to_dict() for wf in recent_workflows])
     except anyio.WouldBlock:
         raise HTTPException(status_code=503, detail="Server is busy")
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to list workflows: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -227,6 +229,8 @@ async def create_workflow(
         return created(data={"workflow_id": saved_id}, message="Workflow created successfully")
     except anyio.WouldBlock:
         raise HTTPException(status_code=503, detail="Server is busy")
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to create workflow: {e}")
         audit_logger.audit({
@@ -383,6 +387,8 @@ async def generate_from_preflow(
         return ok(data=json.loads(workflow.model_dump_json()))
     except anyio.WouldBlock:
         raise HTTPException(status_code=503, detail="Server is busy")
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"PreFlow generation failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -464,6 +470,8 @@ async def retrieve_by_intent(
         return ok(data=psop.model_dump())
     except anyio.WouldBlock:
         raise HTTPException(status_code=503, detail="Server is busy")
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Retrieval failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -493,6 +501,8 @@ async def retrieve_topn_by_intent(
         return ok(data=[r.to_dict() for r in results], message=f"Found {len(results)} matching workflow(s)")
     except anyio.WouldBlock:
         raise HTTPException(status_code=503, detail="Server is busy")
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"TopN retrieval failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -527,6 +537,8 @@ async def list_agent_cards(
         raise HTTPException(status_code=404, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to fetch agent cards: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -563,6 +575,8 @@ async def list_templates(
                     })
                 })
         return ok(data=templates)
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to list templates: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -727,6 +741,11 @@ async def legacy_save_workflow(request: SavePSOPRequest, _: Any = Depends(RateLi
         return JSONResponse(status_code=201, content={"code": 201, "message": "created", "data": {"workflow_id": saved_id}})
     except anyio.WouldBlock:
         raise HTTPException(status_code=503, detail="Server is busy")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to save workflow (legacy): {e}")
+        raise HTTPException(status_code=500, detail=str(e))
     finally:
         if acquired:
             save_psop_semaphore.release()
@@ -745,6 +764,11 @@ async def legacy_delete_workflow(workflow_id: str, _: Any = Depends(RateLimiter(
         return {"code": 200, "message": f"Workflow {workflow_id} deleted", "data": None}
     except anyio.WouldBlock:
         raise HTTPException(status_code=503, detail="Server is busy")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to delete workflow (legacy): {e}")
+        raise HTTPException(status_code=500, detail=str(e))
     finally:
         if acquired:
             delete_psop_semaphore.release()

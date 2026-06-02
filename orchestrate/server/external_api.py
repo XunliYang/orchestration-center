@@ -185,6 +185,11 @@ async def orchestrate_sop(
         return created(data=psop.model_dump(), message="PSOP generated and saved")
     except anyio.WouldBlock:
         raise HTTPException(status_code=503, detail="Server is busy")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"SOP orchestration failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
     finally:
         if acquired:
             sop_semaphore.release()
@@ -219,6 +224,11 @@ async def orchestrate_intent(
         return created(data=psop.model_dump(), message="PSOP generated and saved")
     except anyio.WouldBlock:
         raise HTTPException(status_code=503, detail="Server is busy")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Intent orchestration failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
     finally:
         if acquired:
             intent_semaphore.release()
@@ -244,6 +254,8 @@ async def search_workflows(
         retrieval = WorkflowRetrieval(get_workflow_storage())
         results = retrieval.retrieve_psop_by_intent_topn(body.intent, body.top_n or 5)
         return ok(data=[r.to_dict() for r in results], message=f"Found {len(results)} matching workflow(s)")
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Search failed: {e}")
 

@@ -15,6 +15,7 @@
 
 import asyncio
 import json
+from collections import deque
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Dict, Any, Optional, Callable, List
@@ -102,12 +103,12 @@ class DynamicWorkflowEngine:
 
     async def run(self):
         logger.info(f"Starting PSOP workflow, total {len(self.workflow.steps)} steps")
-        pending = [i for i, s in enumerate(self.workflow.steps) if s.layer == 0 and not self._get_step_predecessors(s.name)]
+        pending = deque([i for i, s in enumerate(self.workflow.steps) if s.layer == 0 and not self._get_step_predecessors(s.name)])
         executed = set()
         defer_count = {}
         try:
             while pending:
-                idx = pending.pop(0)
+                idx = pending.popleft()
                 if idx >= len(self.workflow.steps) or idx in executed:
                     continue
                 current_step = self.workflow.steps[idx]
@@ -120,6 +121,9 @@ class DynamicWorkflowEngine:
                         continue
                     defer_count[idx] = dc
                     pending.append(idx)
+                    await asyncio.sleep(0.05)
+                    continue
+                    await asyncio.sleep(0.05)
                     continue
                 executed.add(idx)
                 self.current_step_idx = idx
@@ -461,19 +465,22 @@ Step type: {current_step.type.value}
             _, decision = await asyncio.get_event_loop().run_in_executor(
                 DynamicWorkflowEngine._llm_executor, self.llm_client.ask_llm, prompt_template
             )
-            decision = decision.strip()
+            decision = decision.strip() if decision else ""
+            if not decision:
+                logger.error(f"LLM returned empty decision for step '{current_step.name}', defaulting to termination.")
+                return "end"
             logger.info(f"LLM route decision for step '{current_step.name}': raw='{decision}', conditions={next_conditions}")
             if decision in ["end", "retry"]:
                 return decision
-            step_names = [s.name for s in self.workflow.steps]
-            step_names_lower = {n.lower(): n for n in step_names}
-            if decision in step_names:
+            allowed_next = [jc.step for jc in (current_step.next or [])]
+            allowed_lower = {n.lower(): n for n in allowed_next}
+            if decision in allowed_next:
                 return decision
-            if decision.lower() in step_names_lower:
-                logger.info(f"LLM step name '{decision}' case-normalized to '{step_names_lower[decision.lower()]}'")
-                return step_names_lower[decision.lower()]
+            if decision.lower() in allowed_lower:
+                logger.info(f"LLM step name '{decision}' case-normalized to '{allowed_lower[decision.lower()]}'")
+                return allowed_lower[decision.lower()]
             else:
-                logger.warning(f"LLM returned illegal Step name: '{decision}', defaulting to termination.")
+                logger.warning(f"LLM returned step '{decision}' not in declared next {allowed_next}, defaulting to termination.")
                 return "end"
         except Exception as e:
             logger.error(f"LLM call failed: {e}")

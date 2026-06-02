@@ -86,7 +86,7 @@ async def run_psop_sse(psop: PSOP, agent_cards: List[AgentCard], runtime_intent:
                 "timestamp": time.monotonic()
             }
             event_queue.put_nowait(event_data)
-            if event_type in ("agent_request", "agent_response"):
+            if event_type in ("agent_request", "agent_response", "psop_update", "complete", "start", "error"):
                 collected_events.append(event_data)
 
         async def run_workflow_async():
@@ -113,6 +113,15 @@ async def run_psop_sse(psop: PSOP, agent_cards: List[AgentCard], runtime_intent:
                 await event_queue.put({
                     "type": "complete",
                     "data": {"psop_id": psop.id, "execution_history": execution_history}
+                })
+            except asyncio.CancelledError:
+                record_status = ExecutionStatus.STOPPED
+                record_error = "Workflow cancelled (client disconnected)"
+                if engine is not None and engine.execution_history:
+                    execution_history = engine.execution_history
+                await event_queue.put({
+                    "type": "error",
+                    "data": {"psop_id": psop.id, "error": "Workflow cancelled: client disconnected"}
                 })
             except Exception as e:
                 logger.error(f"Execution failed: {e}")
@@ -151,21 +160,28 @@ async def run_psop_sse(psop: PSOP, agent_cards: List[AgentCard], runtime_intent:
 
         workflow_task = asyncio.create_task(run_workflow_async())
 
-        init_event = {'type': 'init', 'data': {'psop_id': psop.id, 'message': 'Initializing execution engine'}}
-        yield f"data: {json.dumps(init_event)}\n\n"
+        try:
+            init_event = {'type': 'init', 'data': {'psop_id': psop.id, 'message': 'Initializing execution engine'}}
+            yield f"data: {json.dumps(init_event)}\n\n"
 
-        while True:
-            try:
-                event = await asyncio.wait_for(event_queue.get(), timeout=1.0)
-            except asyncio.TimeoutError:
-                continue
-            if event is None:
-                break
-            yield f"data: {json.dumps(event)}\n\n"
+            while True:
+                event = await event_queue.get()
+                if event is None:
+                    break
+                yield f"data: {json.dumps(event)}\n\n"
 
-        await workflow_task
+            await workflow_task
 
-        yield "event: close\ndata: {}\n\n"
+            yield "event: close\ndata: {}\n\n"
+        except GeneratorExit:
+            logger.info(f"SSE client disconnected for psop_id={psop.id}, cancelling workflow")
+        finally:
+            if not workflow_task.done():
+                workflow_task.cancel()
+                try:
+                    await workflow_task
+                except asyncio.CancelledError:
+                    pass
 
     return StreamingResponse(
         event_generator(),
