@@ -274,6 +274,7 @@ const LogEntry = React.memo(({ event, isDark, t, isSelected }) => {
             let results = [];
             if (obj.text && typeof obj.text === 'string') results.push(obj.text);
             if (obj.message && typeof obj.message === 'string') results.push(obj.message);
+            if (obj.response && typeof obj.response === 'string') results.push(obj.response);
             if (obj.concern && typeof obj.concern === 'string') results.push(obj.concern);
             if (obj.clarification && typeof obj.clarification === 'string') results.push(obj.clarification);
             if (obj.reason && typeof obj.reason === 'string') results.push(obj.reason);
