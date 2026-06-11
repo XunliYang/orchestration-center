@@ -240,6 +240,8 @@ async def create_workflow(
         save_psop_semaphore.acquire_nowait()
         acquired = True
         psop = PSOP.model_validate(request.psop)
+        if not psop.source:
+            psop.source = "graph_editor"
         logger.info(f"Creating workflow: name={psop.name}, id={psop.id}")
         saved_id = SharedHandlers.save_psop().handle(psop)
         logger.info(f"Workflow saved: id={saved_id}")
@@ -399,6 +401,7 @@ async def generate_from_preflow(
             PreFlow.model_validate(request.preflow),
             [Parse(json.dumps(card), AgentCard()) for card in request.agent_cards]
         )
+        workflow.source = "solution_package"
         SharedHandlers.save_psop().handle(workflow)
         logger.info(f"PSOP generated: id={workflow.id}, steps={len(workflow.steps)}")
         audit_logger.audit({
@@ -446,6 +449,7 @@ async def generate_from_intent(
             agent_cards=[Parse(json.dumps(agent), AgentCard()) for agent in agent_cards_raw],
             workflow_name=request.workflow_name
         )
+        psop.source = "ai_intent"
         logger.info(f"PSOP generated from intent: id={psop.id}, steps={len(psop.steps)}")
 
         try:

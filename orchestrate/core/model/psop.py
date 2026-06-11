@@ -99,3 +99,4 @@ class PSOP(BaseModel):
                                        description="Original user intent that generated this workflow,\
                                         empty by default")
     tags: Optional[List[str]] = Field(default_factory=list, description="Tags for quick filtering")
+    source: Optional[str] = Field(None, description="Creation method: graph_editor, ai_intent, solution_package, template")

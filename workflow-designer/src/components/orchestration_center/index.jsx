@@ -19,11 +19,12 @@ import { dump } from 'js-yaml';
 import {
     Search, Loader2, Layout, Hash,
     Plus, Upload, MessageSquare,
-    ChevronRight, Sparkles, ChevronLeft, Code2, Trash2, Download
+    ChevronRight, Sparkles, ChevronLeft, Code2, Trash2, Download, Eye, ArrowLeft
 } from 'lucide-react';
 import { getAgentCards, getWorkflow, getWorkflowById, handlePlan, parsePdf, generateWorkflowFromIntent, delWorkflowById, getTemplates, importTemplate } from "@/service/api.js";
 import { transformWorkflowToReactFlow } from "./workflow/utils/index.jsx";
 import UnifiedWorkflow from "../orchestration_center/workflow/index.jsx";
+import SolutionPackages from "./packages/index.jsx";
 import { useTranslation } from 'react-i18next';
 
 
@@ -94,6 +95,7 @@ const OrchestrationCenter = ({ isDark }) => {
     const [activeView, setActiveView] = useState('welcome'); // 'welcome' | 'detail' | 'ai' | 'editor'
     const [aiPrompt, setAiPrompt] = useState("");
     const [showConfig, setShowConfig] = useState(false);
+    const [browseMode, setBrowseMode] = useState('view');
     const [progress, setProgress] = useState(0);
     const [nodes, setNodes] = useState([]);
     const [edges, setEdges] = useState([]);
@@ -160,6 +162,35 @@ const OrchestrationCenter = ({ isDark }) => {
             setLoading(false);
             setLoadingStatus(LOADING_STAGES.IDLE);
             event.target.value = '';
+        }
+    };
+
+    const handleImportPdfFromPackage = async (file) => {
+        if (!file || file.type !== "application/pdf") return;
+
+        const formData = new FormData();
+        formData.append('file', file);
+
+        setLoading(true);
+        setLoadingStatus(LOADING_STAGES.PARSING);
+        try {
+            const contentData = await parsePdf(file);
+            const agentCards = await getAgentCards();
+            setLoadingStatus(LOADING_STAGES.PLANNING);
+            const agentCardsList = agentCards?.data || agentCards || [];
+            const finalPlan = await handlePlan(contentData, agentCardsList);
+
+            setLoadingStatus(LOADING_STAGES.FINALIZING);
+            const { nodes: n, edges: e } = transformWorkflowToReactFlow(finalPlan);
+            setNodes(n);
+            setEdges(e);
+            setActiveView('detail');
+        } catch (error) {
+            const errorMsg = error.response?.data?.error || "Server response exception";
+            console.error("Upload failed:", errorMsg);
+        } finally {
+            setLoading(false);
+            setLoadingStatus(LOADING_STAGES.IDLE);
         }
     };
 
@@ -246,7 +277,7 @@ const OrchestrationCenter = ({ isDark }) => {
                     setNodes(n);
                     setEdges(e);
 
-                    if (activeView !== 'editor') setActiveView('detail');
+                    if (activeView !== 'editor' && activeView !== 'browse') setActiveView('detail');
                 }
             } catch (e) {
                 console.error("Failed to obtain PSOP details:", e);
@@ -284,7 +315,7 @@ const OrchestrationCenter = ({ isDark }) => {
         switch (activeView) {
             case 'welcome':
                 return (
-                    <div className="h-full w-full relative flex flex-col items-center justify-center overflow-hidden">
+                    <div className="h-full w-full relative flex flex-col items-center overflow-y-auto custom-scrollbar py-12">
                         <div className="absolute inset-0 opacity-[0.03] dark:opacity-[0.05] pointer-events-none"
                             style={{
                                 backgroundImage: 'radial-gradient(#000 1px, transparent 0)',
@@ -300,11 +331,7 @@ const OrchestrationCenter = ({ isDark }) => {
                         <div className="flex gap-8 z-10">
                             <MethodCard
                                 icon={Upload} title={t('orchestration.method_import')} color="text-amber-500"
-                                onClick={() => fileInput.current.click()}
-                                loading={loading && loadingStatus !== LOADING_STAGES.IDLE}
-                                progress={progress}
-                                status={loadingStatus}
-                                t={t}
+                                onClick={() => setActiveView('packages')}
                             />
                             <MethodCard
                                 icon={Layout} title={t('orchestration.method_graph')} color="text-blue-500"
@@ -386,9 +413,218 @@ const OrchestrationCenter = ({ isDark }) => {
                             </div>
                         )}
 
-                        <div
-                            className="absolute bottom-10 w-32 h-[1px] bg-gradient-to-r from-transparent via-zinc-200 dark:via-zinc-800 to-transparent" />
+                        {workflows.length > 0 && (
+                            <div className="z-10 mt-16 text-center animate-in fade-in slide-in-from-bottom-4 duration-700">
+                                <h2 className="text-4xl font-black dark:text-white mb-3">
+                                    {t('orchestration.manage_workflow')}
+                                </h2>
+                            </div>
+                        )}
+
+                        <div className="z-10 mt-12 flex justify-center">
+                            <MethodCard
+                                icon={Eye} title={t('orchestration.browse_workflow')} color="text-emerald-500"
+                                onClick={() => {
+                                    setSelectedId(null);
+                                    setActiveView('browse');
+                                }}
+                            />
+                        </div>
+
+                        <div className="mt-16 w-32 h-[1px] bg-gradient-to-r from-transparent via-zinc-200 dark:via-zinc-800 to-transparent" />
                     </div>
+                );
+
+            case 'browse':
+                return (
+                    <div className="h-full flex animate-in fade-in duration-300">
+                        <div className="w-[300px] shrink-0 border-r border-zinc-100 dark:border-zinc-800 flex flex-col bg-zinc-50/50 dark:bg-zinc-900/50">
+                            <div className="p-5 border-b border-zinc-100 dark:border-zinc-800">
+                                <button
+                                    onClick={() => {
+                                        setSelectedId(null);
+                                        setActiveView('welcome');
+                                    }}
+                                    className="group flex items-center gap-2 text-xs font-black text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200 transition-all uppercase tracking-[0.2em] mb-4"
+                                >
+                                    <ArrowLeft size={14} className="group-hover:-translate-x-1 transition-transform" />
+                                    {t('orchestration.back_to_options')}
+                                </button>
+                                <div className="relative">
+                                    <input
+                                        type="text"
+                                        placeholder={t('orchestration.search')}
+                                        className="w-full pl-9 pr-4 py-2.5 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl text-xs font-bold outline-none focus:border-blue-400 dark:focus:border-blue-500 transition-colors"
+                                        onChange={e => setSearchTerm(e.target.value)}
+                                    />
+                                    <Search className="absolute left-3 top-3 text-zinc-400" size={13} />
+                                </div>
+                            </div>
+                            <div className="flex-1 overflow-y-auto space-y-2 p-4 custom-scrollbar">
+                                {(() => {
+                                    const filtered = workflows.filter(wf => wf.name.toLowerCase().includes(searchTerm.toLowerCase()));
+                                    const grouped = {};
+                                    filtered.forEach(wf => {
+                                        const src = wf.source || 'unknown';
+                                        if (!grouped[src]) grouped[src] = [];
+                                        grouped[src].push(wf);
+                                    });
+                                    const sourceOrder = ['graph_editor', 'ai_intent', 'solution_package', 'template', 'unknown'];
+                                    const sourceIcons = {
+                                        graph_editor: Layout,
+                                        ai_intent: MessageSquare,
+                                        solution_package: Upload,
+                                        template: Sparkles,
+                                        unknown: Hash
+                                    };
+                                    const sourceColors = {
+                                        graph_editor: 'text-blue-500',
+                                        ai_intent: 'text-purple-500',
+                                        solution_package: 'text-amber-500',
+                                        template: 'text-emerald-500',
+                                        unknown: 'text-zinc-400'
+                                    };
+                                    return sourceOrder.filter(src => grouped[src]?.length > 0).map(src => {
+                                        const Icon = sourceIcons[src] || Hash;
+                                        const color = sourceColors[src] || 'text-zinc-400';
+                                        return (
+                                            <div key={src} className="mb-4">
+                                                <div className="flex items-center gap-2 px-2 py-2 mb-2">
+                                                    <Icon size={12} className={color} />
+                                                    <span className={`text-[10px] font-black uppercase tracking-[0.2em] ${color}`}>
+                                                        {t(`orchestration.source_${src}`)}
+                                                    </span>
+                                                    <span className="text-[10px] font-bold text-zinc-300 dark:text-zinc-600">
+                                                        ({grouped[src].length})
+                                                    </span>
+                                                </div>
+                                                {grouped[src].map(wf => {
+                                                    const isSelected = selectedId === wf.id;
+                                                    return (
+                                                        <div
+                                                            key={wf.id}
+                                                            onClick={() => {
+                                                setSelectedId(wf.id);
+                                                setBrowseMode('view');
+                                            }}
+                                                            className={`group p-4 rounded-xl border transition-all duration-300 cursor-pointer relative overflow-hidden mb-2
+                                                                ${isSelected
+                                                                    ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800 shadow-sm'
+                                                                    : 'border-zinc-100 dark:border-zinc-800 bg-white dark:bg-zinc-900 hover:border-blue-200 dark:hover:border-blue-700'
+                                                                }`}
+                                                        >
+                                                            {isSelected && (
+                                                                <div className="absolute left-0 top-0 bottom-0 w-1 bg-blue-500 rounded-r" />
+                                                            )}
+                                                            <div className="flex items-center justify-between mb-1.5 pl-2">
+                                                                <div className={`flex items-center gap-2 ${isSelected ? 'text-blue-700 dark:text-blue-300' : 'text-zinc-500 dark:text-zinc-400'}`}>
+                                                                    <Hash size={14} />
+                                                                    <h3 className="font-black text-sm uppercase leading-none truncate max-w-[180px]">
+                                                                        {wf.name}
+                                                                    </h3>
+                                                                </div>
+                                                                <button
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        setWfToDelete(wf);
+                                                                        setShowDeleteConfirm(true);
+                                                                    }}
+                                                                    className="opacity-0 group-hover:opacity-100 p-1 hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-900/30 dark:hover:text-red-400 rounded-lg transition-all"
+                                                                >
+                                                                    <Trash2 size={12} />
+                                                                </button>
+                                                            </div>
+                                                            <div className={`pl-6 text-[10px] font-black uppercase truncate max-w-[200px] ${isSelected ? 'text-blue-500 dark:text-blue-400' : 'text-zinc-400'}`}>
+                                                                {wf.tags?.length > 0 ? wf.tags.join(', ') : t('orchestration.no_tags')}
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        );
+                                    });
+                                })()}
+                                {workflows.length === 0 && (
+                                    <div className="flex flex-col items-center justify-center py-16 text-zinc-400 dark:text-zinc-600">
+                                        <Hash size={32} className="mb-3 opacity-30" />
+                                        <p className="text-xs font-bold uppercase tracking-widest">{t('orchestration.no_workflows')}</p>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                        <div className="flex-1 flex flex-col overflow-hidden">
+                            {selectedId ? (
+                                <>
+                                    <div className="shrink-0 px-4 py-2 border-b border-zinc-100 dark:border-zinc-800 flex items-center gap-2 bg-white dark:bg-zinc-900 z-10">
+                                        <button
+                                            onClick={() => setShowConfig(!showConfig)}
+                                            className="p-2 bg-zinc-50 dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-full shadow-sm hover:scale-110 transition-all"
+                                        >
+                                            {showConfig ? <ChevronLeft size={14} /> : <ChevronRight size={14} />}
+                                        </button>
+                                        <button
+                                            onClick={() => setBrowseMode(browseMode === 'view' ? 'edit' : 'view')}
+                                            className={`flex items-center gap-2 px-3 py-1.5 rounded-md uppercase text-[11px] font-bold shadow-sm active:scale-95 transition-all
+                                                ${isDark
+                                                    ? 'bg-zinc-100 hover:bg-slate-500 text-black'
+                                                    : 'bg-slate-900 hover:bg-slate-800 text-white'
+                                                }`}
+                                        >
+                                            <Code2 size={13} />
+                                            <span>{browseMode === 'view' ? t('orchestration.edit') : t('orchestration.preview_mode')}</span>
+                                        </button>
+                                    </div>
+                                    <div className="flex-1 flex overflow-hidden">
+                                        {showConfig && (
+                                            <div className="w-1/3 shrink-0 border-r border-zinc-100 dark:border-zinc-900 flex flex-col bg-zinc-50/30 dark:bg-zinc-900 p-6 overflow-hidden">
+                                                <div className="text-[10px] font-black text-zinc-400 uppercase mb-3">workflow</div>
+                                                <textarea
+                                                    readOnly={true}
+                                                    value={dump(currentWf?.rawText || {})}
+                                                    className="flex-1 bg-white dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-4 font-mono text-xs shadow-inner outline-none min-h-0"
+                                                />
+                                            </div>
+                                        )}
+                                        <div className="flex-1 min-w-0 h-full relative">
+                                            <UnifiedWorkflow
+                                                mode={browseMode}
+                                                isDark={isDark}
+                                                nodes={nodes}
+                                                edges={edges}
+                                                importedNodes={nodes}
+                                                importedEdges={edges}
+                                                workflowId={selectedId}
+                                                workflowName={currentWf?.name}
+                                                workflowDescription={currentWf?.rawText?.description}
+                                                onCancel={() => setBrowseMode('view')}
+                                                onSaveSuccess={fetchWorkflows}
+                                            />
+                                        </div>
+                                    </div>
+                                </>
+                            ) : (
+                                <div className="h-full flex flex-col items-center justify-center text-zinc-300 dark:text-zinc-700">
+                                    <Eye size={48} className="mb-4 opacity-30" />
+                                    <p className="text-sm font-black uppercase tracking-widest">{t('orchestration.select_workflow_hint')}</p>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                );
+
+            case 'packages':
+                return (
+                    <SolutionPackages
+                        onBack={() => setActiveView('welcome')}
+                        onImportPdf={handleImportPdfFromPackage}
+                        onViewWorkflow={(wfId) => {
+                            setSelectedId(wfId);
+                        }}
+                        loading={loading && loadingStatus !== LOADING_STAGES.IDLE}
+                        loadingStatus={loadingStatus}
+                        progress={progress}
+                        t={t}
+                    />
                 );
 
             case 'ai':
@@ -538,93 +774,27 @@ const OrchestrationCenter = ({ isDark }) => {
 
     return (
         <div
-            className="h-full p-8 flex items-stretch gap-8 w-full bg-zinc-50 dark:bg-zinc-950 overflow-hidden font-sans">
-            <div className="w-[300px] flex flex-col gap-6 shrink-0">
-                <div
-                    className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-[2.5rem] p-6 shadow-xl">
-                    <div className="flex items-center justify-between mb-5">
-                        <h1 className="text-xl font-black dark:text-white tracking-tighter uppercase">{t('orchestration.title')}</h1>
-                        <button
-                            onClick={() => {
-                                setSelectedId(null);
-                                setActiveView('welcome');
-                            }}
-                            className="p-2.5 bg-zinc-900 dark:bg-white dark:text-zinc-900 text-white rounded-xl hover:scale-105 transition-all shadow-lg"
-                        >
-                            <Plus size={18} strokeWidth={3} />
-                        </button>
-                    </div>
-                    <div className="relative">
-                        <input
-                            type="text"
-                            placeholder={t('orchestration.search')}
-                            className="w-full pl-10 pr-4 py-3 bg-zinc-50 dark:bg-zinc-800 rounded-2xl text-xs font-bold outline-none"
-                            onChange={e => setSearchTerm(e.target.value)}
-                        />
-                        <Search className="absolute left-3.5 top-3.5 text-zinc-400" size={14} />
-                    </div>
-                </div>
-                <div className="flex-1 overflow-y-auto space-y-3 custom-scrollbar px-1">
-                    {workflows.filter(wf => wf.name.toLowerCase().includes(searchTerm.toLowerCase())).map(wf => {
-                        const isSelected = selectedId === wf.id;
-                        return (
-                            <div
-                                key={wf.id}
-                                onClick={() => {
-                                    if (selectedId !== wf.id) {
-                                        setSelectedId(wf.id);
-                                    } else {
-                                        if (activeView !== 'editor') setActiveView('detail');
-                                    }
-                                }}
-                                className={`
-                        group p-5 rounded-2xl border transition-all duration-300 cursor-pointer relative overflow-hidden
-                        ${isSelected
-                                        ? 'bg-zinc-100 dark:bg-zinc-800 border-transparent shadow-inner'
-                                        : 'border-zinc-100 dark:border-zinc-800 bg-white dark:bg-zinc-900 opacity-60 hover:opacity-100'
-                                    }
-                    `}
-                            >
-                                {isSelected && (
-                                    <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-blue-600 animate-pulse" />
-                                )}
-
-                                <div className="flex items-center justify-between mb-2 pl-2">
-                                    <div
-                                        className={`flex items-center gap-3 ${isSelected ? 'text-zinc-900 dark:text-white' : 'text-zinc-400'}`}>
-                                        <Hash size={16} />
-                                        <h3 className="font-black text-base uppercase leading-none truncate max-w-[180px]">
-                                            {wf.name}
-                                        </h3>
-                                    </div>
-                                    <button
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            setWfToDelete(wf);
-                                            setShowDeleteConfirm(true);
-                                        }}
-                                        className="opacity-0 group-hover:opacity-100 p-1.5 hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-900/30 dark:hover:text-red-400 rounded-lg transition-all"
-                                    >
-                                        <Trash2 size={14} />
-                                    </button>
-                                </div>
-
-                                <div
-                                    className={`pl-8 text-[11px] font-black uppercase truncate max-w-[200px] ${isSelected ? 'text-blue-600 dark:text-blue-400' : 'text-zinc-400'}`}>
-                                    {wf.tags?.length > 0 ? wf.tags.join(', ') : t('orchestration.no_tags')}
-                                </div>
-                            </div>
-                        );
-                    })}
-                </div>
-            </div>
+            className="h-full p-8 flex items-stretch w-full bg-zinc-50 dark:bg-zinc-950 overflow-hidden font-sans">
             <div
                 className="flex-1 bg-white dark:bg-zinc-900 rounded-[3.5rem] border border-zinc-200 dark:border-zinc-800 shadow-2xl relative overflow-hidden flex flex-col">
                 <div
                     className="px-10 py-6 border-b border-zinc-50 dark:border-zinc-800 flex justify-between items-center  bg-white dark:bg-zinc-900 backdrop-blur-md shrink-0">
                     <div className="flex items-center gap-4">
+                        {(activeView === 'editor' || activeView === 'ai') && (
+                            <button
+                                onClick={() => {
+                                    setActiveView('welcome');
+                                    setSelectedId(null);
+                                    setAiPrompt('');
+                                }}
+                                className="group flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-all uppercase tracking-widest"
+                            >
+                                <ArrowLeft size={14} className="group-hover:-translate-x-1 transition-transform" />
+                                {t('orchestration.back_to_options')}
+                            </button>
+                        )}
                         <h2 className="text-lg font-black dark:text-white uppercase">
-                            {activeView === 'welcome' ? t('orchestration.start') : (activeView === 'ai' ? t('orchestration.ai_orchestrator') : (currentWf?.name || t('orchestration.new_design')))}
+                            {activeView === 'welcome' ? t('orchestration.start') : (activeView === 'ai' ? t('orchestration.ai_orchestrator') : (activeView === 'packages' ? t('orchestration.packages_title') : (activeView === 'browse' ? t('orchestration.browse_workflow') : (currentWf?.name || t('orchestration.new_design')))))}
                         </h2>
 
                         {activeView === 'detail' && (
