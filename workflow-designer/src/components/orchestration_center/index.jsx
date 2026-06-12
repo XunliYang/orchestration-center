@@ -793,9 +793,13 @@ const OrchestrationCenter = ({ isDark }) => {
                                 {t('orchestration.back_to_options')}
                             </button>
                         )}
-                        <h2 className="text-lg font-black dark:text-white uppercase">
-                            {activeView === 'welcome' ? t('orchestration.start') : (activeView === 'ai' ? t('orchestration.ai_orchestrator') : (activeView === 'packages' ? t('orchestration.packages_title') : (activeView === 'browse' ? t('orchestration.browse_workflow') : (currentWf?.name || t('orchestration.new_design')))))}
-                        </h2>
+                        <div className="flex items-center gap-2 text-lg font-black uppercase">
+                            <span className="text-zinc-400 dark:text-zinc-500">{t('orchestration.title')}</span>
+                            <ChevronRight size={16} className="text-zinc-300 dark:text-zinc-600" />
+                            <span className="dark:text-white">
+                                {activeView === 'welcome' ? t('orchestration.start') : (activeView === 'ai' ? t('orchestration.ai_orchestrator') : (activeView === 'packages' ? t('orchestration.packages_title') : (activeView === 'browse' ? t('orchestration.browse_workflow') : (currentWf?.name || t('orchestration.new_design')))))}
+                            </span>
+                        </div>
 
                         {activeView === 'detail' && (
 
