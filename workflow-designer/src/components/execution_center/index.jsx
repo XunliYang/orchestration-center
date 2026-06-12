@@ -895,7 +895,16 @@ const ExecutionCenter = ({ isDark }) => {
 
     return (
         <div className="h-full flex flex-col w-full overflow-hidden font-sans">
-            <div className="shrink-0 flex items-center gap-1 px-6 pt-6 pb-2">
+            <div className="shrink-0 px-6 pt-6 pb-2">
+                <div className="flex items-center gap-2 text-lg font-black uppercase mb-4">
+                    <span className="text-zinc-400 dark:text-zinc-500">{t('nav.tabs.execution')}</span>
+                    <ChevronRight size={16} className="text-zinc-300 dark:text-zinc-600" />
+                    <span className="text-zinc-900 dark:text-white">
+                        {activeSubMenu === 'execution' ? t('execution.sub_menu_execution') : t('execution.sub_menu_statistics')}
+                    </span>
+                </div>
+            </div>
+            <div className="shrink-0 flex items-center gap-1 px-6 pb-2">
                 <button
                     onClick={() => setActiveSubMenu('execution')}
                     className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wide transition-all duration-300
