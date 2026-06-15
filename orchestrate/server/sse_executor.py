@@ -85,7 +85,7 @@ async def run_psop_sse(psop: PSOP, agent_cards: List[AgentCard], runtime_intent:
             event_data = {
                 "type": event_type,
                 "data": serializable_data,
-                "timestamp": time.monotonic()
+                "timestamp": time.time()
             }
             event_queue.put_nowait(event_data)
             if event_type in ("agent_request", "agent_response", "psop_update", "complete", "start", "error",
