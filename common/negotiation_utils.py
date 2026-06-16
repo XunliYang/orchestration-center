@@ -18,7 +18,7 @@
 from typing import Dict, Any, Optional
 from loguru import logger
 
-from a2a_t.negotiation.common.enums import NegotiationType, NegotiationStatus, NegotiationRole
+from a2a_t.negotiation.common.enums import NegotiationType, NegotiationStatus
 from a2a_t.negotiation.common.models import NegotiationContext
 
 
@@ -29,7 +29,7 @@ TASK_PROMPT_KEY = "https://github.com/a2aproject/telecommunication/extensions/Ta
 NEGOTIATION_RESOLUTION_MARKER = "[NEGOTIATION_RESOLUTION]"
 NEGOTIATION_REQUEST_MARKER = "[NEGOTIATION_REQUEST]"
 NEGOTIATION_CONTEXT_MARKER = "[NEGOTIATION_CONTEXT]"
-_NEGOTIATION_MAX_ROUNDS = 5
+NEGOTIATION_CONCERN_KEY = "negotiationConcern"
 
 
 def extract_negotiation_context_from_task_metadata(
@@ -38,7 +38,7 @@ def extract_negotiation_context_from_task_metadata(
     if not task_metadata:
         return None
 
-    context_data = task_metadata.get("negotiationContext")
+    context_data = task_metadata.get(NEGOTIATION_CONTEXT_KEY)
     if not context_data:
         return None
 
@@ -55,7 +55,7 @@ def extract_negotiation_context_from_artifact_metadata(
     if not artifact_metadata:
         return None
 
-    context_data = artifact_metadata.get("negotiationContext")
+    context_data = artifact_metadata.get(NEGOTIATION_CONTEXT_KEY)
     if not context_data:
         return None
 
@@ -66,15 +66,19 @@ def extract_negotiation_context_from_artifact_metadata(
         return None
 
 
-def build_negotiation_metadata(
-    negotiation_result: Dict[str, Any]
+def build_negotiation_response_metadata(
+    negotiation_context_data: Optional[Dict[str, Any]],
+    negotiation_text: Optional[str],
+    negotiation_concern: Optional[str] = None,
 ) -> Dict[str, Any]:
-    context_data = negotiation_result.get(NEGOTIATION_CONTEXT_KEY)
-    if not context_data:
-        logger.warning("No negotiation context in result")
-        return {}
-
-    return {"negotiationContext": context_data}
+    metadata: Dict[str, Any] = {}
+    if negotiation_context_data:
+        metadata[NEGOTIATION_CONTEXT_KEY] = negotiation_context_data
+    if negotiation_text:
+        metadata[NEGOTIATION_TEXT_KEY] = negotiation_text
+    if negotiation_concern:
+        metadata[NEGOTIATION_CONCERN_KEY] = negotiation_concern
+    return metadata
 
 
 def is_negotiation_in_progress(context: NegotiationContext) -> bool:
@@ -148,8 +152,8 @@ Reply with exactly one word: YES or NO."""
 def extract_negotiation_content(task_metadata: Dict[str, Any]) -> tuple[Optional[str], Optional[dict]]:
     if not task_metadata:
         return None, None
-    negotiation_text = task_metadata.get("negotiationText")
-    context_data = task_metadata.get("negotiationContext")
+    negotiation_text = task_metadata.get(NEGOTIATION_TEXT_KEY)
+    context_data = task_metadata.get(NEGOTIATION_CONTEXT_KEY)
     return negotiation_text, context_data
 
 
@@ -164,11 +168,11 @@ def build_negotiation_resolution_task(
         "",
         f"{resolution_text}",
         "",
-        f"---",
-        f"Original Task:",
+        "---",
+        "Original Task:",
         f"{original_task}",
         "",
-        f"Please re-execute the task based on the clarification above.",
+        "Please re-execute the task based on the clarification above.",
     ]
     if continued_context:
         import json as _json

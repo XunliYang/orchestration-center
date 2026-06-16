@@ -70,11 +70,17 @@ class AgentRegistryClient:
         data = MessageToDict(agent)
         resp = await self._request('PUT', f'/rest/v1/registry-center/agent-cards/{organization}/{name}',
                              json={"agentCards":[data]})
-        return resp.json()
+        try:
+            return resp.json()
+        except Exception:
+            return resp.status_code in (200, 201, 204)
 
     async def deregister(self, name: str, organization: str) -> bool:
         resp = await self._request('DELETE', f'/rest/v1/registry-center/agent-cards/{organization}/{name}')
-        return resp.json()
+        try:
+            return resp.json()
+        except Exception:
+            return resp.status_code in (200, 201, 204)
 
     async def get(self, name: str, organization: str) -> dict | None:
         resp = await self._request('GET', f'/rest/v1/registry-center/agent-cards/{organization}/{name}')

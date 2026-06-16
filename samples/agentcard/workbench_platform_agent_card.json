@@ -10,7 +10,23 @@
 			"streaming": true,
 			"pushNotifications": false,
 			"extendedAgentCard": false,
-			"extensions": []
+			"extensions": [
+				{
+					"uri": "https://github.com/a2aproject/telecommunication/extensions/Task-T/v1",
+					"description": "Extension of structured prompt TASK-T requests.",
+					"required": false
+				},
+				{
+					"uri": "https://github.com/a2aproject/telecommunication/extensions/NEGOTIATION-T",
+					"description": "Extension for A2A-T negotiation text exchange.",
+					"required": false
+				},
+				{
+					"uri": "https://github.com/a2aproject/telecommunication/extensions/DATA-NEGOTIATION-T/v1",
+					"description": "Extension for A2A-T negotiation context data.",
+					"required": false
+				}
+			]
 		},
 		"defaultInputModes": ["application/json",
 		"text/plain"],
@@ -29,11 +45,24 @@
 		}],
 		"securitySchemes": {
 			"bearerAuth": {
-				"scheme": "Bearer",
-				"description": "使用用户名和密码通过OAuth2 Password Grant接口获取access_token后，使用fmind-auth头部进行认证。"
+				"oauth2SecurityScheme": {
+					"description": "OAuth2 Password Grant — 通过 /oauth/token 接口获取 access_token，使用 fmind-auth 头部进行认证",
+					"flows": {
+						"password": {
+							"token_url": "http://<YOUR_HOST>:<YOUR_PORT>/bgw/cswg-service/oauth/token",
+							"scopes": {}
+						}
+					}
+				}
 			}
 		},
-		"securityRequirements": [],
+		"securityRequirements": [
+			{
+				"schemes": {
+					"bearerAuth": {}
+				}
+			}
+		],
 		"supportedInterfaces": [{
 			"protocolBinding": "JSONRPC",
 			"url": "http://127.0.0.1:26336/a2a/v1",

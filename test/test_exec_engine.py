@@ -1279,7 +1279,7 @@ class TestNegotiationFlow:
         task.status = status
         task.metadata = {
             "negotiationConcern": "I need more information about the target",
-            "negotiationContext": {
+            "https://github.com/a2aproject/telecommunication/extensions/DATA-NEGOTIATION-T/v1": {
                 "negotiationType": "fulfillment",
                 "negotiationId": "neg-001",
                 "role": "client",
@@ -1325,7 +1325,7 @@ class TestNegotiationFlow:
             "message": "Acknowledged",
         }
         mock.continue_negotiation.return_value = {
-            "negotiationContext": {
+            "https://github.com/a2aproject/telecommunication/extensions/DATA-NEGOTIATION-T/v1": {
                 "negotiationType": "fulfillment",
                 "negotiationId": "neg-001",
                 "round": 1,

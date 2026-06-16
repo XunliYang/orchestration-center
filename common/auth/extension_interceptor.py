@@ -19,7 +19,7 @@ from typing import List
 
 from a2a.client.interceptors import ClientCallInterceptor, BeforeArgs, AfterArgs
 from a2a.client.client import ClientCallContext
-from a2a.extensions.common import HTTP_EXTENSION_HEADER
+from a2a.extensions.common import HTTP_EXTENSION_HEADER, get_requested_extensions
 from loguru import logger
 
 
@@ -28,6 +28,9 @@ class ExtensionInterceptor(ClientCallInterceptor):
 
     Reads the agent's declared extensions (from capabilities.extensions[].uri) and
     sets the A2A-Extensions header so the server knows which extensions the client supports.
+
+    Uses the official a2a-sdk `get_requested_extensions()` utility for safe URI
+    merging and deduplication, per the A2A protocol specification.
     """
 
     def __init__(self, extension_uris: List[str]):
@@ -44,12 +47,14 @@ class ExtensionInterceptor(ClientCallInterceptor):
             args.context.service_parameters = {}
 
         existing = args.context.service_parameters.get(HTTP_EXTENSION_HEADER, "")
-        existing_uris = set(e.strip() for e in existing.split(",") if e.strip())
-        all_uris = sorted(existing_uris | set(self._uris))
-        args.context.service_parameters[HTTP_EXTENSION_HEADER] = ",".join(all_uris)
+        existing_values = [existing] if existing else []
+        merged = sorted(get_requested_extensions([*existing_values, *self._uris]))
+        extension_value = ",".join(merged)
+        args.context.service_parameters[HTTP_EXTENSION_HEADER] = extension_value
+        args.context.service_parameters["x-a2a-extensions"] = extension_value
 
-        logger.debug(
-            f"[Extensions] Set {HTTP_EXTENSION_HEADER}={args.context.service_parameters[HTTP_EXTENSION_HEADER]}"
+        logger.info(
+            f"[Extensions] Set {HTTP_EXTENSION_HEADER}={extension_value} (also x-a2a-extensions)"
         )
 
     async def after(self, args: AfterArgs) -> None:

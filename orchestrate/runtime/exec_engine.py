@@ -40,6 +40,60 @@ except ImportError:
     _A2AT_AVAILABLE = False
     A2ATClient = None
 
+import google.protobuf.json_format as _json_format
+
+_original_parse = _json_format.Parse
+
+_STREAM_RESPONSE_KEYS = frozenset({"task", "message", "statusUpdate", "artifactUpdate"})
+
+
+def _normalize_stream_response(data: dict) -> dict:
+    if _STREAM_RESPONSE_KEYS.intersection(data):
+        return data
+    if "id" in data and "status" in data:
+        return {"task": data}
+    if "artifact" in data and "taskId" in data:
+        return {"artifactUpdate": data}
+    if "status" in data and "taskId" in data:
+        return {"statusUpdate": data}
+    return data
+
+
+def _parse_with_unknown(text, message, ignore_unknown_fields=False, **kwargs):
+    from a2a.types.a2a_pb2 import StreamResponse
+    if isinstance(message, StreamResponse):
+        try:
+            import json as _json
+            data = _json.loads(text)
+            if isinstance(data, dict):
+                if not _STREAM_RESPONSE_KEYS.intersection(data):
+                    logger.warning(f"[A2A] Non-SSE response from server: {text[:2048]}")
+                data = _normalize_stream_response(data)
+                text = _json.dumps(data)
+        except Exception:
+            pass
+    return _original_parse(text, message, ignore_unknown_fields=True, **kwargs)
+
+
+_original_parse_dict = _json_format.ParseDict
+
+
+def _parse_dict_with_unknown(js, message, *args, **kwargs):
+    from a2a.types.a2a_pb2 import StreamResponse
+    if isinstance(message, StreamResponse) and isinstance(js, dict):
+        js = _normalize_stream_response(js)
+    kwargs.pop("ignore_unknown_fields", None)
+    args = list(args)
+    if args:
+        args[0] = True
+    else:
+        kwargs["ignore_unknown_fields"] = True
+    return _original_parse_dict(js, message, *args, **kwargs)
+
+
+_json_format.Parse = _parse_with_unknown
+_json_format.ParseDict = _parse_dict_with_unknown
+
 from common.llm import get_llm_instance
 from common.auth import get_auth_manager
 from common.auth.agent_credential_service import CustomAuthInterceptor
@@ -97,7 +151,9 @@ class DynamicWorkflowEngine:
                 if cred_svc is not None:
                     agent_cfg = auth_manager.get_config(card.name) or {}
                     if any(
-                        isinstance(v, dict) and v.get("auth_header")
+                        isinstance(v, dict) and (
+                            v.get("auth_header") or v.get("accept_header")
+                        )
                         for v in agent_cfg.values()
                     ):
                         interceptors.append(CustomAuthInterceptor(cred_svc, agent_cfg))
@@ -121,7 +177,17 @@ class DynamicWorkflowEngine:
     def _get_httpx_client(self) -> httpx.AsyncClient:
         if self._httpx_client is None:
             timeout_config = httpx.Timeout(connect=60, read=60, write=60, pool=10.0)
-            self._httpx_client = httpx.AsyncClient(timeout=timeout_config, verify=False, follow_redirects=True)
+
+            async def _log_request(request: httpx.Request):
+                logger.info(
+                    f"[HTTP] >>> {request.method} {request.url}  "
+                    f"headers={dict(request.headers)}"
+                )
+
+            self._httpx_client = httpx.AsyncClient(
+                timeout=timeout_config, verify=False, follow_redirects=True,
+                event_hooks={"request": [_log_request]},
+            )
             auth_manager = get_auth_manager()
             auth_manager.set_httpx_client(self._httpx_client)
         return self._httpx_client
@@ -232,6 +298,13 @@ class DynamicWorkflowEngine:
         uris = self._get_task_t_uris(agent_card)
         return uris[0] if uris else None
 
+    def _supports_negotiation(self, agent_card) -> bool:
+        if getattr(agent_card, 'capabilities', None) and agent_card.capabilities.extensions:
+            for ext in agent_card.capabilities.extensions:
+                if ext.uri and 'NEGOTIATION-T' in ext.uri:
+                    return True
+        return False
+
     async def send_message_to_agent(self, agent_name: str, task: str, httpx_client=None):
         return await self._send_with_negotiation(agent_name, task, httpx_client)
 
@@ -244,6 +317,16 @@ class DynamicWorkflowEngine:
             task_state = task_result.status.state
             from a2a.types import TaskState as TS
             if task_state == TS.TASK_STATE_INPUT_REQUIRED:
+                agent_card = self._agent_map.get(agent_name)
+                if not agent_card or not self._supports_negotiation(agent_card):
+                    logger.warning(
+                        f"Agent '{agent_name}' returned INPUT_REQUIRED but does not declare"
+                        f" NEGOTIATION-T extension. Returning response text as-is."
+                    )
+                    if response_text is not None:
+                        return response_text
+                    return ""
+
                 if _round >= self._NEGOTIATION_MAX_ROUNDS:
                     logger.error(
                         f"Negotiation with agent '{agent_name}' reached max rounds ({self._NEGOTIATION_MAX_ROUNDS}) "
@@ -294,16 +377,12 @@ class DynamicWorkflowEngine:
         except ImportError:
             pass
 
-        if self.a2at_client and not skip_prompt_gen:
+        if self.a2at_client and task_t_uri and not skip_prompt_gen:
             try:
                 prompt_result = self.a2at_client.generate_task_prompt(task)
                 if prompt_result.success and prompt_result.prompt_text:
-                    if task_t_uri:
-                        task_t_metadata = prompt_result.prompt_text
-                        logger.info(f"[A2AT] Generated TASK-T prompt for agent '{agent_name}', will set in metadata")
-                    else:
-                        task_text = prompt_result.prompt_text
-                        logger.info(f"[A2AT] Generated task prompt for agent '{agent_name}'")
+                    task_t_metadata = prompt_result.prompt_text
+                    logger.info(f"[A2AT] Generated TASK-T prompt for agent '{agent_name}', will set in metadata")
                 else:
                     logger.warning(f"[A2AT] Task prompt generation failed, using original task")
             except Exception as e:
@@ -316,7 +395,14 @@ class DynamicWorkflowEngine:
                 if iface.protocol_binding
             ] or ["HTTP+JSON", "JSONRPC"]
             selected_url = agent_card.supported_interfaces[0].url if agent_card.supported_interfaces else "N/A"
-            logger.info(f"Calling agent '{agent_name}' via {protocol_bindings[0] if protocol_bindings else 'unknown'} -> {selected_url}")
+            streaming = agent_card.capabilities.streaming if agent_card.capabilities else False
+            proto = protocol_bindings[0] if protocol_bindings else 'unknown'
+            if proto == "HTTP+JSON":
+                endpoint = "message:stream" if streaming else "message:send"
+                full_url = f"{selected_url}/{endpoint}"
+            else:
+                full_url = selected_url
+            logger.info(f"Calling agent '{agent_name}' via {proto} (streaming={streaming}) -> {full_url}")
             config = ClientConfig(
                 httpx_client=client,
                 supported_protocol_bindings=protocol_bindings,
@@ -334,11 +420,12 @@ class DynamicWorkflowEngine:
                 request_msg.metadata.CopyFrom(meta)
                 logger.info(f"[A2AT] Set TASK-T metadata on message for agent '{agent_name}'")
             send_req = SendMessageRequest(message=request_msg)
-            send_req_json = MessageToJson(send_req, preserving_proto_field_name=True)
-            try:
-                req_payload = json.loads(send_req_json)
-            except (json.JSONDecodeError, TypeError):
-                req_payload = send_req_json
+            req_payload = json.loads(MessageToJson(send_req, preserving_proto_field_name=False))
+            logger.info(
+                f"[A2A] Sending to agent '{agent_name}': "
+                f"url={full_url}, "
+                f"body={json.dumps(req_payload, ensure_ascii=False)}"
+            )
             self._push_event("agent_request", {
                 "agent": agent_name,
                 "request": req_payload
@@ -352,7 +439,7 @@ class DynamicWorkflowEngine:
 
             async for response in client.send_message(send_req):
                 try:
-                    raw_resp = MessageToJson(response, preserving_proto_field_name=True)
+                    raw_resp = MessageToJson(response, preserving_proto_field_name=False)
                     resp_payload = json.loads(raw_resp) if raw_resp != "{}" else raw_resp
                 except Exception:
                     resp_payload = str(response)
@@ -428,8 +515,9 @@ class DynamicWorkflowEngine:
         })
 
     def _push_negotiation_event(self, agent_name: str, metadata_dict: Dict[str, Any], round_num: int):
-        concern = metadata_dict.get("negotiationConcern", "")
-        context_data = metadata_dict.get("negotiationContext", {})
+        from common.negotiation_utils import NEGOTIATION_CONTEXT_KEY, NEGOTIATION_CONCERN_KEY
+        concern = metadata_dict.get(NEGOTIATION_CONCERN_KEY, "")
+        context_data = metadata_dict.get(NEGOTIATION_CONTEXT_KEY) or {}
         self._push_event("negotiation_request", {
             "agent": agent_name,
             "response": json.dumps({
@@ -456,6 +544,7 @@ class DynamicWorkflowEngine:
             extract_negotiation_content,
             build_negotiation_resolution_task,
             NEGOTIATION_CONTEXT_KEY,
+            NEGOTIATION_CONCERN_KEY,
             extract_original_task_from_follow_up,
         )
 
@@ -464,7 +553,7 @@ class DynamicWorkflowEngine:
 
         negotiation_text, context_data = extract_negotiation_content(metadata_dict)
         if not negotiation_text or not context_data:
-            negotiation_concern = metadata_dict.get("negotiationConcern", "")
+            negotiation_concern = metadata_dict.get(NEGOTIATION_CONCERN_KEY, "")
             if negotiation_concern:
                 negotiation_text = negotiation_concern
             else:
