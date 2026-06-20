@@ -16,3 +16,5 @@ etc/conf/task_prompt_stubs.json
 *.key
 etc/ssl/
 etc/conf/agent_credentials.json
+etc/conf/server.conf
+*.token.md
