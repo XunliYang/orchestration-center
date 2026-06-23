@@ -18,13 +18,13 @@
 from typing import Dict, Any, Optional
 from loguru import logger
 
+from a2a_t.negotiation.common.constants import (
+    NEGOTIATION_TEXT_KEY,
+    NEGOTIATION_CONTEXT_KEY,
+    TASK_PROMPT_KEY,
+)
 from a2a_t.negotiation.common.enums import NegotiationType, NegotiationStatus
 from a2a_t.negotiation.common.models import NegotiationContext
-
-
-NEGOTIATION_TEXT_KEY = "https://github.com/a2aproject/telecommunication/extensions/NEGOTIATION-T"
-NEGOTIATION_CONTEXT_KEY = "https://github.com/a2aproject/telecommunication/extensions/DATA-NEGOTIATION-T/v1"
-TASK_PROMPT_KEY = "https://github.com/a2aproject/telecommunication/extensions/Task-T/v1"
 
 NEGOTIATION_RESOLUTION_MARKER = "[NEGOTIATION_RESOLUTION]"
 NEGOTIATION_REQUEST_MARKER = "[NEGOTIATION_REQUEST]"
