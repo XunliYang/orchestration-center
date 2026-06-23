@@ -415,6 +415,9 @@ data: {"type": "<event type>", "data": {<event data>}, "timestamp": <timestamp>}
 | `start`         | Workflow execution begins  | After `init`           | `psop_id`, `message`           |
 | `agent_request` | Task sent to Agent         | At each step start     | `agent` — target agent name, `request` — protobuf-formatted request body |
 | `agent_response`| Agent returns result       | At each step completion | `agent` — source agent name, `response` — protobuf-formatted response body |
+| `negotiation_request` | Negotiation request sent | When engine initiates A2A-T negotiation | `agent`, `negotiation_id` |
+| `negotiation_resolved` | Negotiation resolved | When negotiation reaches agreement | `agent`, `negotiation_id`, `resolution` |
+| `negotiation_failed` | Negotiation failed | When negotiation is rejected or times out | `agent`, `negotiation_id`, `reason` |
 | `psop_update`   | Workflow status update     | After each step        | `psop` — complete PSOP JSON (with task status: pending/success/failed) |
 | `complete`      | Workflow execution complete | After all steps are done | `psop_id`, `execution_history` — step-level execution history |
 | `error`         | Execution exception        | On execution failure or cancellation | `psop_id`, `error` — error description |

@@ -135,7 +135,7 @@ When `persistence_mode` is set to a value other than `file`, the system will pri
 #### 4.1.3 Development Steps
 Step 1: Import required modules
 ```python
-from common.custom.default_handle import BaseHandler, HandlerRegistry, InterfaceType
+from common.custom.default_handle import BaseHandle, HandlerRegistry, InterfaceType
 ```
 
 Step 2: Create a custom handler
@@ -187,7 +187,7 @@ Step 5: Complete example
 
 Below is a complete custom handler implementation example:
 ```python
-from common.custom.default_handle import BaseHandler, HandlerRegistry, InterfaceType
+from common.custom.default_handle import BaseHandle, HandlerRegistry, InterfaceType
 
 class SaveCustomHandle(BaseHandle):
     """Custom query handler"""
