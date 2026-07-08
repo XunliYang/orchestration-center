@@ -320,64 +320,107 @@ Registry Center 需要两类证书：
 
 | 证书类型 | 用途 | 容器路径 | 文件名 |
 |----------|------|----------|--------|
-| TLS 证书 | HTTPS 通信 | `etc/ssl/` | server.cer, server_key.pem, trust.cer |
+| TLS 证书 | HTTPS 通信 | `etc/ssl/` | server.cer, server_key.pem, trust.cer, cert_pwd |
 | JWS 签名证书 | Agent Card 签名 | `etc/sign_cert/` | server.cer, server_key.pem, cert_pwd |
 
 **证书模式设计：**
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                    证书模式选择                                   │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│  mode: auto (默认)                                              │
-│  ├── entrypoint.sh 自动生成自签名证书                            │
-│  ├── 每个 Pod 独立生成，证书不同                                 │
-│  └── 适用：开发/测试，单副本                                     │
-│                                                                 │
-│  mode: secret                                                   │
-│  ├── 从 K8S Secret 挂载到容器                                   │
-│  ├── 所有 Pod 共享相同证书                                       │
-│  └── 适用：生产环境，多副本                                      │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────┐
+│                        证书模式选择                                   │
+├─────────────────────────────────────────────────────────────────────┤
+│                                                                     │
+│  mode: auto (默认，推荐)                                             │
+│  ├── Helm 模板调用 genCA() + genSignedCert() 生成自签名证书          │
+│  ├── 证书数据写入 K8S Secret (registry-center-tls / -signing)       │
+│  ├── Deployment 挂载 Secret 到 etc/ssl 和 etc/sign_cert             │
+│  ├── entrypoint 检测到证书文件已存在 → 跳过自动生成                   │
+│  ├── helm upgrade 时通过 lookup() 保留已有证书，不重新生成            │
+│  └── 多副本共享同一 Secret → 证书一致 ✓                              │
+│                                                                     │
+│  mode: secret                                                       │
+│  ├── 用户预创建 K8S Secret (正式证书 / 自定义 CA)                    │
+│  ├── Deployment 挂载用户 Secret                                      │
+│  └── 适用于需要正式 CA 签发证书的生产环境                             │
+│                                                                     │
+│  mode: off                                                          │
+│  ├── 不挂载任何证书 volume                                           │
+│  ├── entrypoint 每次启动自动生成自签名证书到容器文件系统              │
+│  ├── 容器重启 → 证书丢失 → 重新生成                                  │
+│  └── 仅用于开发调试，不用于生产                                       │
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘
 ```
 
-**为什么生产环境必须用 secret 模式？**
+**auto 模式流程图：**
 
-1. **JWS 签名一致性**：Agent Card 签名需要所有副本使用相同证书，否则验证失败
-2. **TLS 证书稳定**：避免每次重启重新生成，导致客户端信任问题
-3. **证书轮换**：通过更新 Secret 实现证书轮换，无需重建镜像
+```
+helm install / helm upgrade
+    │
+    ▼
+cert-secret.yaml 模板渲染
+    │
+    ├── lookup("v1", "Secret", ns, "registry-center-tls")
+    │       │
+    │       ├── 存在 → 复用已有证书数据 (b64enc 直接复制)
+    │       │
+    │       └── 不存在 → genCA("OpenAN CA", 3650)
+    │                      genSignedCert("registry-center", ..., 3650, $ca)
+    │                      写入新 Secret
+    │
+    ▼
+Secret 创建/更新
+    │
+    ▼
+Deployment 挂载 Secret
+    │
+    ├── registry-center-tls    → /opt/registry-center/etc/ssl
+    └── registry-center-signing → /opt/registry-center/etc/sign_cert
+    │
+    ▼
+entrypoint 检测
+    │
+    ├── 证书文件已存在 → 跳过生成，直接使用
+    └── 证书文件不存在 → 自动生成 (mode=off 时)
+```
 
-**Helm 配置示例：**
+**Helm 模板关键代码 (cert-secret.yaml)：**
 
 ```yaml
-registry:
-  tls:
-    mode: secret
-    existingSecret: registry-tls      # 包含 server.cer, server_key.pem, trust.cer
-  signing:
-    mode: secret
-    existingSecret: registry-signing  # 包含 server.cer, server_key.pem, cert_pwd
+{{- $existingTls := lookup "v1" "Secret" .Values.namespace "registry-center-tls" -}}
+{{- if $existingTls }}
+# 复用已有证书
+data:
+  server.cer: {{ index $existingTls.data "server.cer" }}
+  ...
+{{- else }}
+# 首次安装，生成新证书
+{{- $ca := genCA "OpenAN CA" 3650 -}}
+{{- $tlsCert := genSignedCert "registry-center" nil (list "registry-center" ...) 3650 $ca -}}
+data:
+  server.cer: {{ $tlsCert.Cert | b64enc }}
+  ...
+{{- end }}
 ```
 
 **Deployment 挂载逻辑：**
 
 ```yaml
-# templates/registry-center/deployment.yaml
-{{- if eq .Values.registry.tls.mode "secret" }}
+{{- if ne .Values.registry.tls.mode "off" }}
 volumeMounts:
 - name: tls-certs
   mountPath: /opt/registry-center/etc/ssl
   readOnly: true
 {{- end }}
 
-{{- if eq .Values.registry.signing.mode "secret" }}
-volumeMounts:
-- name: signing-certs
-  mountPath: /opt/registry-center/etc/sign_cert
-  readOnly: true
-{{- end }}
+volumes:
+- name: tls-certs
+  secret:
+    {{- if eq .Values.registry.tls.mode "auto" }}
+    secretName: registry-center-tls        # Helm 自动生成
+    {{- else }}
+    secretName: {{ .Values.registry.tls.existingSecret }}  # 用户提供
+    {{- end }}
 ```
 
 ### 5.3 网络安全

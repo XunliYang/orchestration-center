@@ -1,0 +1,97 @@
+# Copyright (c) 2026 Huawei Technologies Co., Ltd.
+# All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Skip this file when using an external PostgreSQL database.
+# Update k8s/configmap.yaml DB_HOST to your external DB address instead.
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: orchestration-postgres
+  namespace: orchestration-center
+  labels:
+    app: orchestration-postgres
+spec:
+  clusterIP: None
+  selector:
+    app: orchestration-postgres
+  ports:
+  - port: 5432
+    targetPort: 5432
+    protocol: TCP
+    name: postgres
+
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: orchestration-postgres
+  namespace: orchestration-center
+  labels:
+    app: orchestration-postgres
+spec:
+  serviceName: orchestration-postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app: orchestration-postgres
+  template:
+    metadata:
+      labels:
+        app: orchestration-postgres
+    spec:
+      containers:
+      - name: postgres
+        image: postgres:15-alpine
+        ports:
+        - containerPort: 5432
+        env:
+        - name: POSTGRES_DB
+          value: "orchestration_center"
+        - name: POSTGRES_USER
+          value: "opena2a_t"
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: orchestration-center-secret
+              key: db-password
+        - name: PGDATA
+          value: "/var/lib/postgresql/data/pgdata"
+        readinessProbe:
+          exec:
+            command:
+            - pg_isready
+            - -U
+            - opena2a_t
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        livenessProbe:
+          exec:
+            command:
+            - pg_isready
+            - -U
+            - opena2a_t
+          initialDelaySeconds: 15
+          periodSeconds: 30
+        resources:
+          requests:
+            cpu: 250m
+            memory: 256Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        volumeMounts:
+        - name: postgres-data
+          mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:
+  - metadata:
+      name: postgres-data
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      resources:
+        requests:
+          storage: 10Gi
+      # storageClassName: ""  # Adjust for your cluster's StorageClass

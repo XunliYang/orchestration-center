@@ -97,30 +97,38 @@ spec:
           {{- toYaml .Values.registry.readinessProbe | nindent 10 }}
         resources:
           {{- toYaml .Values.registry.resources | nindent 10 }}
-        {{- if or (eq .Values.registry.tls.mode "secret") (eq .Values.registry.signing.mode "secret") }}
+        {{- if or (ne .Values.registry.tls.mode "off") (ne .Values.registry.signing.mode "off") }}
         volumeMounts:
-        {{- if eq .Values.registry.tls.mode "secret" }}
+        {{- if ne .Values.registry.tls.mode "off" }}
         - name: tls-certs
           mountPath: /opt/registry-center/etc/ssl
           readOnly: true
         {{- end }}
-        {{- if eq .Values.registry.signing.mode "secret" }}
+        {{- if ne .Values.registry.signing.mode "off" }}
         - name: signing-certs
           mountPath: /opt/registry-center/etc/sign_cert
           readOnly: true
         {{- end }}
         {{- end }}
-      {{- if or (eq .Values.registry.tls.mode "secret") (eq .Values.registry.signing.mode "secret") }}
+      {{- if or (ne .Values.registry.tls.mode "off") (ne .Values.registry.signing.mode "off") }}
       volumes:
-      {{- if eq .Values.registry.tls.mode "secret" }}
+      {{- if ne .Values.registry.tls.mode "off" }}
       - name: tls-certs
         secret:
+          {{- if eq .Values.registry.tls.mode "auto" }}
+          secretName: registry-center-tls
+          {{- else }}
           secretName: {{ .Values.registry.tls.existingSecret }}
+          {{- end }}
       {{- end }}
-      {{- if eq .Values.registry.signing.mode "secret" }}
+      {{- if ne .Values.registry.signing.mode "off" }}
       - name: signing-certs
         secret:
+          {{- if eq .Values.registry.signing.mode "auto" }}
+          secretName: registry-center-signing
+          {{- else }}
           secretName: {{ .Values.registry.signing.existingSecret }}
+          {{- end }}
       {{- end }}
       {{- end }}
 {{- end }}

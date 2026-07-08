@@ -1,0 +1,35 @@
+# Copyright (c) 2026 Huawei Technologies Co., Ltd.
+# All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# BEFORE DEPLOYING: Replace "orchestration-center.example.com" with your actual domain.
+# To enable TLS, uncomment the tls section and configure your certificate.
+
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: orchestration-center
+  namespace: orchestration-center
+  labels:
+    app: orchestration-center
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+spec:
+  ingressClassName: nginx
+  # tls:
+  # - hosts:
+  #   - orchestration-center.example.com
+  #   secretName: orchestration-center-tls
+  rules:
+  - host: orchestration-center.example.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: orchestration-center
+            port:
+              number: 80

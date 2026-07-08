@@ -1,0 +1,38 @@
+# Copyright (c) 2026 Huawei Technologies Co., Ltd.
+# All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: orchestration-center-config
+  namespace: orchestration-center
+  labels:
+    app: orchestration-center
+data:
+  # Server
+  ORCH_IP: "0.0.0.0"
+  ORCH_PORT: "5001"
+  ORCH_ENABLE_HTTPS: "false"
+  ORCH_FORWARDED_ALLOW_IPS: "*"
+
+  # Persistence
+  PERSISTENCE_MODE: "postgresql"
+
+  # Database (default: internal PostgreSQL service)
+  DB_HOST: "orchestration-postgres"
+  DB_PORT: "5432"
+  DB_NAME: "orchestration_center"
+  DB_USERNAME: "opena2a_t"
+
+  # Agent Registry Center (fill in your Registry URL)
+  AGENT_REGISTRY_URL: ""
+
+  # LLM Chat (for PSOP generation and execution)
+  LLM_CHAT_MODEL: "deepseek-chat"
+  LLM_CHAT_URL: "https://api.deepseek.com/v1/chat/completions"
+
+  # A2AT SDK LLM config
+  A2AT_LLM_PROVIDER: "deepseek"
+  A2AT_LLM_MODEL: "deepseek-chat"
+  A2AT_LLM_BASE_URL: "https://api.deepseek.com"

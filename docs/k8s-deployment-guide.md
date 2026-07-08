@@ -392,50 +392,49 @@ Registry Center 需要两类证书：
 
 **证书模式：**
 
-| 模式 | 说明 | 适用场景 |
-|------|------|----------|
-| `auto` | entrypoint 自动生成自签名证书 | 开发/测试，单副本 |
-| `secret` | 从 K8S Secret 挂载 | 生产环境，多副本 |
+| 模式 | 说明 | 多副本 | 适用场景 |
+|------|------|--------|----------|
+| `auto` (默认) | Helm 用 `genCA`/`genSignedCert` 自动生成，存入 Secret | 一致 | 推荐，所有场景 |
+| `secret` | 从用户预创建的 K8S Secret 挂载 | 一致 | 需要正式证书 |
+| `off` | entrypoint 每次启动自动生成，不持久化 | 不一致 | 仅开发调试 |
 
-**创建 TLS 证书 Secret：**
+**`auto` 模式工作原理：**
+
+1. `helm install` 时，Helm 模板调用 `genCA` + `genSignedCert` 生成自签名证书
+2. 证书数据写入 K8S Secret (`registry-center-tls` / `registry-center-signing`)
+3. Deployment 将 Secret 挂载到 `etc/ssl` 和 `etc/sign_cert`
+4. entrypoint 检测到证书文件已存在，跳过自动生成
+5. `helm upgrade` 时，通过 `lookup` 检测已有 Secret，**保留原证书不重新生成**
+
+**无需任何手动操作，开箱即用。**
+
+**使用正式证书 (secret 模式)：**
 
 ```bash
-# 从现有证书文件创建
-kubectl -n openan create secret generic registry-tls \
+# 创建 TLS 证书 Secret
+kubectl -n openan create secret generic registry-center-tls-custom \
   --from-file=server.cer=./server.crt \
   --from-file=server_key.pem=./server.key \
-  --from-file=trust.cer=./ca.crt
+  --from-file=trust.cer=./ca.crt \
+  --from-file=cert_pwd=./cert_pwd.txt
 
-# 或使用 cert-manager 自动签发（推荐）
-# 参考: https://cert-manager.io/docs/usage/certificate/
-```
-
-**创建 JWS 签名证书 Secret：**
-
-```bash
-# 从现有证书文件创建
-kubectl -n openan create secret generic registry-signing \
+# 创建 JWS 签名证书 Secret
+kubectl -n openan create secret generic registry-center-signing-custom \
   --from-file=server.cer=./sign_cert/server.cer \
   --from-file=server_key.pem=./sign_cert/server_key.pem \
-  --from-file=cert_pwd=./sign_cert/cert_pwd
+  --from-file=cert_pwd=./sign_cert/cert_pwd.txt
 ```
 
-**配置 Helm values：**
-
 ```yaml
+# values.yaml
 registry:
   tls:
     mode: secret
-    existingSecret: registry-tls
+    existingSecret: registry-center-tls-custom
   signing:
     mode: secret
-    existingSecret: registry-signing
+    existingSecret: registry-center-signing-custom
 ```
-
-**重要提示：**
-- 生产环境多副本部署时，**必须**使用 `secret` 模式
-- `auto` 模式下每个 Pod 生成不同的证书，导致 JWS 签名不一致
-- 证书 Secret 需要包含正确的文件名（server.cer, server_key.pem 等）
 
 ---
 
@@ -479,8 +478,9 @@ kubectl -n ingress-nginx logs -l app.kubernetes.io/component=controller
 
 ## 安全建议
 
-1. **使用外部 Secret 管理**：生产环境建议使用 Vault、AWS Secrets Manager 等
-2. **启用 TLS**：配置 Ingress TLS 或使用 cert-manager 自动签发证书
-3. **网络策略**：使用 NetworkPolicy 限制 Pod 间通信
-4. **镜像安全**：使用私有镜像仓库，启用镜像签名验证
-5. **资源限制**：设置合理的 requests/limits 防止资源滥用
+1. **证书管理**：默认 `auto` 模式自动生成自签名证书，生产环境建议使用 `secret` 模式配合正式 CA 证书
+2. **使用外部 Secret 管理**：生产环境建议使用 Vault、AWS Secrets Manager 等管理敏感信息
+3. **启用 TLS**：配置 Ingress TLS 或使用 cert-manager 自动签发证书
+4. **网络策略**：使用 NetworkPolicy 限制 Pod 间通信
+5. **镜像安全**：使用私有镜像仓库，启用镜像签名验证
+6. **资源限制**：设置合理的 requests/limits 防止资源滥用
