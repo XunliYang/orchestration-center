@@ -110,13 +110,11 @@ data:
   create-databases.sh: |
     #!/bin/bash
     set -e
-
-    # Create multiple databases and users
-    {{- range .Values.postgresql.databases }}
-    psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" <<-EOSQL
-      CREATE USER {{ .user }} WITH PASSWORD '${POSTGRES_PASSWORD}';
-      CREATE DATABASE {{ .name }} OWNER {{ .user }};
-      GRANT ALL PRIVILEGES ON DATABASE {{ .name }} TO {{ .user }};
+    {{ range .Values.postgresql.databases }}
+    psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" <<EOSQL
+    CREATE USER {{ .user }} WITH PASSWORD '${POSTGRES_PASSWORD}';
+    CREATE DATABASE {{ .name }} OWNER {{ .user }};
+    GRANT ALL PRIVILEGES ON DATABASE {{ .name }} TO {{ .user }};
     EOSQL
-    {{- end }}
+    {{ end }}
 {{- end }}
