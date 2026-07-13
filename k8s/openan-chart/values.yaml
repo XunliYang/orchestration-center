@@ -8,6 +8,8 @@
 
 # Global settings
 namespace: openan
+# Set to false if namespace already exists or managed externally
+createNamespace: true
 
 # =============================================================================
 # PostgreSQL Configuration (Shared)
