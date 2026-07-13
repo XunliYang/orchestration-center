@@ -88,6 +88,23 @@ app: openan-postgres
 {{- end }}
 
 {{/*
+Workflow Designer labels
+*/}}
+{{- define "openan.frontend.labels" -}}
+{{ include "openan.labels" . }}
+app: workflow-designer
+app.kubernetes.io/name: workflow-designer
+app.kubernetes.io/component: frontend
+{{- end }}
+
+{{/*
+Workflow Designer selector labels
+*/}}
+{{- define "openan.frontend.selectorLabels" -}}
+app: workflow-designer
+{{- end }}
+
+{{/*
 Registry Center URL
 */}}
 {{- define "openan.registryUrl" -}}

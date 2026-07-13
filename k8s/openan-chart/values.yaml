@@ -176,6 +176,47 @@ orchestration:
     periodSeconds: 10
 
 # =============================================================================
+# Workflow Designer Configuration (Frontend)
+# =============================================================================
+frontend:
+  # Set to false to skip workflow-designer deployment
+  enabled: true
+  replicas: 2
+  image:
+    repository: workflow-designer
+    tag: latest
+    pullPolicy: Always
+  port: 80
+  # Resource limits
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+  # HPA
+  hpa:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilization: 70
+    targetMemoryUtilization: 80
+  # Probes
+  livenessProbe:
+    httpGet:
+      path: /
+      port: 80
+    initialDelaySeconds: 10
+    periodSeconds: 30
+  readinessProbe:
+    httpGet:
+      path: /
+      port: 80
+    initialDelaySeconds: 5
+    periodSeconds: 10
+
+# =============================================================================
 # Ingress Configuration
 # =============================================================================
 ingress:

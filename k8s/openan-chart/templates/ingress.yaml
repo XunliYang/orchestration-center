@@ -21,25 +21,25 @@ spec:
     secretName: {{ .Values.ingress.tls.secretName }}
   {{- end }}
   rules:
-  - host: {{ .Values.ingress.host }}
-    http:
-      paths:
-      {{- if .Values.orchestration.enabled }}
-      - path: /
-        pathType: Prefix
-        backend:
-          service:
-            name: orchestration-center
-            port:
-              number: {{ .Values.orchestration.port }}
-      {{- end }}
-      {{- if .Values.registry.enabled }}
-      - path: /registry
-        pathType: Prefix
-        backend:
-          service:
-            name: registry-center
-            port:
-              number: {{ .Values.registry.port }}
-      {{- end }}
+    - host: {{ .Values.ingress.host }}
+      http:
+        paths:
+          {{- if .Values.frontend.enabled }}
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: workflow-designer
+                port:
+                  number: {{ .Values.frontend.port }}
+          {{- end }}
+          {{- if .Values.registry.enabled }}
+          - path: /registry
+            pathType: Prefix
+            backend:
+              service:
+                name: registry-center
+                port:
+                  number: {{ .Values.registry.port }}
+          {{- end }}
 {{- end }}

@@ -13,6 +13,12 @@ Registry Center:
 
 Orchestration Center:
   Internal URL: http://orchestration-center:{{ .Values.orchestration.port }}
+{{- end }}
+
+{{- if .Values.frontend.enabled }}
+
+Workflow Designer (Frontend):
+  Internal URL: http://workflow-designer:{{ .Values.frontend.port }}
   {{- if .Values.ingress.enabled }}
   External URL: http{{ if .Values.ingress.tls.enabled }}s{{ end }}://{{ .Values.ingress.host }}/
   {{- end }}
@@ -35,4 +41,7 @@ View logs:
 {{- end }}
 {{- if .Values.orchestration.enabled }}
   kubectl -n {{ .Values.namespace }} logs -l app=orchestration-center -f
+{{- end }}
+{{- if .Values.frontend.enabled }}
+  kubectl -n {{ .Values.namespace }} logs -l app=workflow-designer -f
 {{- end }}

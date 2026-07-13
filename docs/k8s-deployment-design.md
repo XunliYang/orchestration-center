@@ -70,6 +70,14 @@ Apache License 2.0
 │                         OpenAN Platform                             │
 ├─────────────────────────────────────────────────────────────────────┤
 │                                                                     │
+│   ┌─────────────────────┐                                           │
+│   │ Workflow Designer   │                                           │
+│   │ (Frontend)          │                                           │
+│   │  - React + Vite     │                                           │
+│   │  - Nginx 反向代理   │                                           │
+│   └─────────┬───────────┘                                           │
+│             │ /rest/v1/orchestrate/*                                │
+│             ▼                                                       │
 │   ┌─────────────────────┐         ┌─────────────────────────────┐  │
 │   │ Orchestration       │         │ Registry Center             │  │
 │   │ Center              │────────▶│                             │  │
@@ -95,15 +103,15 @@ Apache License 2.0
 
 ### 3.1.2、组件对比
 
-| 特性 | Registry Center | Orchestration Center |
-|:-----|:----------------|:---------------------|
-| 端口 | 5000 | 5001 |
-| 数据库 | registry_center | orchestration_center |
-| LLM 用途 | 语义搜索、Embedding、Rerank | PSOP 生成、工作流执行、协商 |
-| LLM 模型 | chat + embed + rerank | chat + a2at |
-| 依赖 | 独立 | 依赖 Registry Center |
-| 可选性 | 必选 | 可选 |
-| 资源限制 | 512Mi/500m | 1Gi/1000m |
+| 特性 | Registry Center | Orchestration Center | Workflow Designer |
+|:-----|:----------------|:---------------------|:------------------|
+| 端口 | 5000 | 5001 | 80 (Nginx) |
+| 数据库 | registry_center | orchestration_center | 无 |
+| LLM 用途 | 语义搜索、Embedding、Rerank | PSOP 生成、工作流执行、协商 | 无 |
+| LLM 模型 | chat + embed + rerank | chat + a2at | 无 |
+| 依赖 | 独立 | 依赖 Registry Center | 依赖 Orchestration Center |
+| 可选性 | 必选 | 可选 | 可选 |
+| 资源限制 | 512Mi/500m | 1Gi/1000m | 256Mi/500m |
 
 ### 3.1.3、部署流程图
 
@@ -164,12 +172,16 @@ k8s/openan-chart/
     │   ├── configmap.yaml               # registry 配置
     │   ├── deployment.yaml
     │   └── service.yaml                 # port 5000
-    └── orchestration-center/
-        ├── secret.yaml                  # orchestration 独立 secret
-        ├── configmap.yaml
-        ├── deployment.yaml
-        ├── service.yaml                 # port 5001
-        └── hpa.yaml
+    ├── orchestration-center/
+    │   ├── secret.yaml                  # orchestration 独立 secret
+    │   ├── configmap.yaml
+    │   ├── deployment.yaml
+    │   ├── service.yaml                 # port 5001
+    │   └── hpa.yaml
+    └── workflow-designer/
+        ├── deployment.yaml              # 前端 Deployment
+        ├── service.yaml                 # 前端 Service
+        └── hpa.yaml                     # 前端 HPA
 ```
 
 #### 核心设计
@@ -278,13 +290,13 @@ rules:
 - host: {{ .Values.ingress.host }}
   http:
     paths:
-    {{- if .Values.orchestration.enabled }}
+    {{- if .Values.frontend.enabled }}
     - path: /
       backend:
         service:
-          name: orchestration-center
+          name: workflow-designer
           port:
-            number: {{ .Values.orchestration.port }}
+            number: {{ .Values.frontend.port }}
     {{- end }}
     {{- if .Values.registry.enabled }}
     - path: /registry
@@ -295,6 +307,10 @@ rules:
             number: {{ .Values.registry.port }}
     {{- end }}
 ```
+
+前端 workflow-designer 的 Nginx 配置内部反向代理：
+- `/rest/v1/orchestrate/*` → `http://orchestration-center:5001`
+- 其他路径 → 静态文件服务
 
 ### 3.2.2、证书管理模块
 
@@ -501,14 +517,16 @@ deploy.sh
 | 接口 | 提供方 | 消费方 | 协议 | 说明 |
 |:-----|:-------|:-------|:-----|:-----|
 | `/rest/v1/registry-center/agent-cards` | registry-center | orchestration-center | HTTP | Agent Card 查询 |
+| `/rest/v1/orchestrate/*` | orchestration-center | workflow-designer | HTTP | 工作流管理 API |
 | `/rest/v1/orchestrate/agent-cards` | orchestration-center | 外部 | HTTP | 健康检查 |
+| `/` | workflow-designer | 外部 | HTTP | 前端页面 |
 | PostgreSQL :5432 | openan-postgres | registry-center, orchestration-center | TCP | 数据库连接 |
 
 #### 外部接口
 
 | 接口 | 提供方 | 消费方 | 协议 | 说明 |
 |:-----|:-------|:-------|:-----|:-----|
-| Ingress `/` | orchestration-center | 用户 | HTTPS | 编排中心 API |
+| Ingress `/` | workflow-designer | 用户 | HTTPS | 前端页面入口 |
 | Ingress `/registry` | registry-center | 用户 | HTTPS | 注册中心 API |
 | LLM API | DeepSeek/OpenAI | registry-center, orchestration-center | HTTPS | 大模型服务 |
 
@@ -522,9 +540,10 @@ deploy.sh
 | S2: PostgreSQL 部署 | 部署共享 PostgreSQL 实例 | P0 |
 | S3: Registry Center 部署 | 部署注册中心服务 | P0 |
 | S4: Orchestration Center 部署 | 部署编排中心服务 | P0 |
-| S5: 证书自动生成 | Helm 自动生成 TLS/JWS 证书 | P1 |
-| S6: Ingress 配置 | 配置统一入口和路由 | P1 |
-| S7: HPA 自动伸缩 | 配置自动伸缩策略 | P2 |
+| S5: Workflow Designer 部署 | 部署前端工作流设计器 | P0 |
+| S6: 证书自动生成 | Helm 自动生成 TLS/JWS 证书 | P1 |
+| S7: Ingress 配置 | 配置统一入口和路由 | P1 |
+| S8: HPA 自动伸缩 | 配置自动伸缩策略 | P2 |
 
 ### 3.3.2、Story 设计
 
@@ -577,7 +596,21 @@ deploy.sh
 **接口清单**：
 - Service: `orchestration-center:5001`
 
-#### S5: 证书自动生成
+#### S5: Workflow Designer 部署
+
+**功能描述**：部署前端工作流设计器，提供可视化工作流编辑界面
+
+**验收标准**：
+- 默认 2 副本
+- 端口 80 (Nginx)
+- 静态文件服务 + API 反向代理
+- 健康检查端点 `/`
+
+**接口清单**：
+- Service: `workflow-designer:80`
+- 反向代理: `/rest/v1/orchestrate/*` → `orchestration-center:5001`
+
+#### S6: 证书自动生成
 
 **功能描述**：Helm 自动生成自签名证书，支持升级时保留
 
@@ -591,22 +624,22 @@ deploy.sh
 - Secret: `registry-center-tls`
 - Secret: `registry-center-signing`
 
-#### S6: Ingress 配置
+#### S7: Ingress 配置
 
 **功能描述**：配置 Nginx Ingress，统一入口
 
 **验收标准**：
 - 支持 TLS 终止
-- 路径 `/` 路由到 orchestration-center
+- 路径 `/` 路由到 workflow-designer
 - 路径 `/registry` 路由到 registry-center
 - 超时配置 300s
 
 **接口清单**：
 - Ingress: `openan-ingress`
 
-#### S7: HPA 自动伸缩
+#### S8: HPA 自动伸缩
 
-**功能描述**：配置 Orchestration Center 自动伸缩
+**功能描述**：配置 Orchestration Center 和 Workflow Designer 自动伸缩
 
 **验收标准**：
 - 最小副本 2，最大副本 10
@@ -615,6 +648,7 @@ deploy.sh
 
 **接口清单**：
 - HPA: `orchestration-center`
+- HPA: `workflow-designer`
 
 ## 3.4、质量属性设计
 
@@ -685,9 +719,10 @@ deploy.sh
 | 2 | 基础设施 | S2: PostgreSQL 部署 | 部署共享 PostgreSQL 实例 |
 | 3 | 应用服务 | S3: Registry Center 部署 | 部署注册中心服务 |
 | 4 | 应用服务 | S4: Orchestration Center 部署 | 部署编排中心服务 |
-| 5 | 安全 | S5: 证书自动生成 | Helm 自动生成 TLS/JWS 证书 |
-| 6 | 网络 | S6: Ingress 配置 | 配置统一入口和路由 |
-| 7 | 弹性 | S7: HPA 自动伸缩 | 配置自动伸缩策略 |
+| 5 | 应用服务 | S5: Workflow Designer 部署 | 部署前端工作流设计器 |
+| 6 | 安全 | S6: 证书自动生成 | Helm 自动生成 TLS/JWS 证书 |
+| 7 | 网络 | S7: Ingress 配置 | 配置统一入口和路由 |
+| 8 | 弹性 | S8: HPA 自动伸缩 | 配置自动伸缩策略 |
 
 # 5、修改日志
 
@@ -698,6 +733,7 @@ deploy.sh
 | 1.2 | 按 Feature-Design 模板重构文档 |
 | 1.3 | 移除纯 YAML 部署方式，仅保留 Helm Chart |
 | 1.4 | 增加单机 Docker Compose 部署模块，支持一键式容器化部署 |
+| 1.5 | 增加 Workflow Designer 前端部署支持，完善 Ingress 路由配置 |
 
 # 6、参考目录
 
