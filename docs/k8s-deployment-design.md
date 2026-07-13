@@ -526,17 +526,26 @@ OpenAN 平台包含三个组件，每个组件都有独立的 Dockerfile：
 
 **方式一：使用构建脚本（推荐）**
 
-```bash
-# 本地构建（不推送）
-./k8s/build-images.sh
+Helm Chart 仓库提供独立的构建脚本 `k8s/openan-chart/build/build.sh`，支持多种源码来源：
 
-# 构建并推送到私有仓库
-./k8s/build-images.sh \
-  --registry harbor.example.com \
-  --namespace openan \
-  --tag v1.0.0 \
-  --push
+```bash
+# 使用本地源码
+./k8s/openan-chart/build/build.sh \
+  --registry-src /path/to/registry-center \
+  --orchestration-src /path/to/orchestration-center
+
+# 使用 Git 仓库
+./k8s/openan-chart/build/build.sh \
+  --registry-repo https://github.com/org/registry-center.git \
+  --orchestration-repo https://github.com/org/orchestration-center.git
+
+# 使用配置文件
+cp k8s/openan-chart/build/build-config.yaml.example k8s/openan-chart/build/build-config.yaml
+vim k8s/openan-chart/build/build-config.yaml
+./k8s/openan-chart/build/build.sh --config k8s/openan-chart/build/build-config.yaml --push
 ```
+
+注意：Workflow Designer 是 Orchestration Center 的子目录（`orchestration-center/workflow-designer`），构建脚本会自动处理，无需单独指定。
 
 **方式二：手动构建**
 
