@@ -1,19 +1,69 @@
-# OpenAN Platform Kubernetes 部署设计文档
+# 1、特性描述
 
-**版本**: 1.0  
-**日期**: 2026-07-07  
-**状态**: 已实现
+OpenAN 平台（Registry Center + Orchestration Center）Kubernetes 集群 Helm Chart 部署方案。
 
-## 1. 概述
+## 1.1、依赖组件
 
-本文档描述 OpenAN 平台（Registry Center + Orchestration Center）在 Kubernetes 集群上的部署设计。提供两种部署方式：
+| 组件 | 组件描述 | 可获得性 |
+|:-----|:---------|:---------|
+| Kubernetes | 容器编排平台，版本 1.24+ | 开源 |
+| PostgreSQL | 关系型数据库，版本 15 | 开源 |
+| Nginx Ingress Controller | Ingress 控制器，支持 TLS 终止 | 开源 |
+| Helm | Kubernetes 包管理器，版本 3.x | 开源 |
+| LLM API | 大语言模型服务（DeepSeek/OpenAI 等） | 商业服务 |
 
-1. **纯 YAML 部署**：适用于简单场景、快速验证
-2. **Helm Chart 部署**：适用于生产环境、多配置管理
+## 1.2、License
 
-## 2. 平台架构
+Apache License 2.0
 
-### 2.1 组件关系
+# 2、需求场景威胁建模
+
+## 2.1、威胁场景分析
+
+| 威胁场景 | 影响 | 缓解措施 |
+|:---------|:-----|:---------|
+| LLM API Key 泄露 | 未授权访问 LLM 服务，产生费用 | 使用 K8S Secret 存储，支持外部 Secret 管理 |
+| 数据库密码泄露 | 数据被未授权访问或篡改 | Secret 加密存储，支持 Vault 集成 |
+| 证书私钥泄露 | 中间人攻击，数据被窃听 | Secret 权限控制，支持 cert-manager 自动轮换 |
+| Pod 间未授权访问 | 服务被横向移动攻击 | NetworkPolicy 限制 Pod 间通信 |
+| 镜像供应链攻击 | 恶意代码注入 | 私有镜像仓库，镜像签名验证 |
+
+## 2.2、信任边界
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                    外部网络 (不可信)                                 │
+└─────────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                    Ingress Controller (DMZ)                         │
+│                    - TLS 终止                                       │
+│                    - 请求过滤                                       │
+└─────────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                    openan Namespace (可信)                          │
+│                    ┌──────────────────────────────────────────┐    │
+│                    │  registry-center / orchestration-center  │    │
+│                    │  - mTLS (可选)                           │    │
+│                    │  - ServiceAccount 隔离                   │    │
+│                    └──────────────────────────────────────────┘    │
+│                              │                                      │
+│                              ▼                                      │
+│                    ┌──────────────────────────────────────────┐    │
+│                    │  openan-postgres (数据层)                │    │
+│                    │  - 仅 Pod 可访问                         │    │
+│                    └──────────────────────────────────────────┘    │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+# 3、特性设计
+
+## 3.1、上下文/USE-CASE视图
+
+### 3.1.1、平台架构
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
@@ -43,66 +93,56 @@
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
-### 2.2 组件对比
+### 3.1.2、组件对比
 
 | 特性 | Registry Center | Orchestration Center |
-|------|-----------------|---------------------|
-| **端口** | 5000 | 5001 |
-| **数据库** | registry_center | orchestration_center |
-| **LLM 用途** | 语义搜索、Embedding、Rerank | PSOP 生成、工作流执行、协商 |
-| **LLM 模型** | chat + embed + rerank | chat + a2at |
-| **依赖** | 独立 | 依赖 Registry Center |
-| **可选性** | 必选 | 可选 |
-| **资源** | 512Mi/500m | 1Gi/1000m |
+|:-----|:----------------|:---------------------|
+| 端口 | 5000 | 5001 |
+| 数据库 | registry_center | orchestration_center |
+| LLM 用途 | 语义搜索、Embedding、Rerank | PSOP 生成、工作流执行、协商 |
+| LLM 模型 | chat + embed + rerank | chat + a2at |
+| 依赖 | 独立 | 依赖 Registry Center |
+| 可选性 | 必选 | 可选 |
+| 资源限制 | 512Mi/500m | 1Gi/1000m |
 
-## 3. 部署方式设计
-
-### 3.1 纯 YAML 部署
-
-#### 设计理念
-
-- **简单直接**：每个资源一个文件，易于理解和修改
-- **手动控制**：通过选择性地 `kubectl apply` 控制部署内容
-- **零学习成本**：不需要学习 Helm 模板语法
-
-#### 文件结构
+### 3.1.3、部署流程图
 
 ```
-k8s/
-├── namespace.yaml              # Namespace: openan
-├── secret.yaml                 # DB 密码、LLM API Keys
-├── configmap.yaml              # 环境变量配置
-├── postgres-statefulset.yaml   # PostgreSQL StatefulSet
-├── deployment.yaml             # orchestration-center Deployment
-├── service.yaml                # ClusterIP Service
-├── ingress.yaml                # Nginx Ingress
-└── hpa.yaml                    # 自动伸缩
+用户
+ │
+ ├── helm install openan-chart
+ │
+ ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                    Kubernetes Cluster                               │
+│                                                                     │
+│  1. Namespace 创建 (openan)                                        │
+│                                                                     │
+│  2. Secret/ConfigMap 创建                                          │
+│     ├── DB 密码                                                    │
+│     ├── LLM API Keys                                               │
+│     └── 证书 (auto 模式: genCA + genSignedCert)                    │
+│                                                                     │
+│  3. PostgreSQL StatefulSet 启动                                    │
+│     ├── 等待就绪                                                   │
+│     └── 初始化数据库 (create-databases.sh)                         │
+│                                                                     │
+│  4. Registry Center Deployment 启动                                │
+│     ├── 挂载证书 Secret                                            │
+│     └── 等待就绪                                                   │
+│                                                                     │
+│  5. Orchestration Center Deployment 启动                           │
+│     ├── 发现 Registry Center (http://registry-center:5000)         │
+│     └── 等待就绪                                                   │
+│                                                                     │
+│  6. Service/Ingress/HPA 创建                                       │
+│                                                                     │
+└─────────────────────────────────────────────────────────────────────┘
 ```
 
-#### 设计决策
+## 3.2、模块设计
 
-| 决策 | 选择 | 理由 |
-|------|------|------|
-| 文件组织 | 按资源类型分文件 | 清晰、易于定位 |
-| 配置方式 | ConfigMap + Secret | 分离敏感信息 |
-| 数据库 | StatefulSet + PVC | 简单、自包含 |
-| 服务发现 | ClusterIP Service | 集群内部通信 |
-| 外部访问 | Nginx Ingress | 通用、支持 TLS |
-
-#### 局限性
-
-- 可选组件需手动排除文件
-- 多环境需维护多套配置
-- 配置变更需直接编辑 YAML
-
-### 3.2 Helm Chart 部署
-
-#### 设计理念
-
-- **声明式配置**：通过 `values.yaml` 统一管理所有配置
-- **可选组件**：通过 `enabled` 标志控制组件部署
-- **多环境支持**：通过多个 values 文件支持 dev/prod 环境
-- **版本管理**：Chart 版本化，支持升级和回滚
+### 3.2.1、Helm Chart 部署模块
 
 #### 文件结构
 
@@ -118,6 +158,8 @@ k8s/openan-chart/
     ├── postgres/
     │   └── statefulset.yaml             # 共享 PostgreSQL
     ├── registry-center/
+    │   ├── tls-secret.yaml              # TLS 证书 (auto 模式)
+    │   ├── signing-secret.yaml          # JWS 签名证书 (auto 模式)
     │   ├── secret.yaml                  # registry 独立 secret
     │   ├── configmap.yaml               # registry 配置
     │   ├── deployment.yaml
@@ -132,7 +174,7 @@ k8s/openan-chart/
 
 #### 核心设计
 
-##### 3.2.1 可选组件
+##### 可选组件
 
 ```yaml
 # values.yaml
@@ -153,7 +195,7 @@ kind: Deployment
 {{- end }}
 ```
 
-##### 3.2.2 独立 LLM 配置
+##### 独立 LLM 配置
 
 两个服务各有独立的 LLM 配置，互不影响：
 
@@ -188,7 +230,7 @@ orchestration:
     apiKey: ""
 ```
 
-##### 3.2.3 共享 PostgreSQL
+##### 共享 PostgreSQL
 
 单个 PostgreSQL 实例，通过 init script 创建多个数据库：
 
@@ -209,7 +251,7 @@ CREATE DATABASE registry_center OWNER registry;
 ...
 ```
 
-##### 3.2.4 服务发现
+##### 服务发现
 
 Orchestration Center 自动发现 Registry Center：
 
@@ -226,7 +268,7 @@ Orchestration Center 自动发现 Registry Center：
 {{- end }}
 ```
 
-##### 3.2.5 Ingress 路由
+##### Ingress 路由
 
 统一入口，按路径分发：
 
@@ -254,111 +296,30 @@ rules:
     {{- end }}
 ```
 
-## 4. 资源设计
+### 3.2.2、证书管理模块
 
-### 4.1 资源限制
-
-| 组件 | requests | limits | 说明 |
-|------|----------|--------|------|
-| PostgreSQL | 250m/256Mi | 500m/512Mi | 轻量级数据库 |
-| Registry Center | 250m/256Mi | 500m/512Mi | 无状态服务 |
-| Orchestration Center | 250m/512Mi | 1000m/1Gi | LLM 调用较密集 |
-
-### 4.2 健康检查
-
-| 组件 | 端点 | 说明 |
-|------|------|------|
-| PostgreSQL | `pg_isready -U postgres` | 原生就绪检查 |
-| Registry Center | `/rest/v1/registry-center/agent-cards` | 轻量级 API |
-| Orchestration Center | `/rest/v1/orchestrate/agent-cards` | 轻量级 API |
-
-### 4.3 自动伸缩
-
-仅 Orchestration Center 配置 HPA：
-
-```yaml
-orchestration:
-  hpa:
-    enabled: true
-    minReplicas: 2
-    maxReplicas: 10
-    targetCPUUtilization: 70
-    targetMemoryUtilization: 80
-```
-
-Registry Center 固定副本数，因为：
-- 负载相对较低
-- 需要保持与 VectorDB 的连接稳定
-
-## 5. 安全设计
-
-### 5.1 Secret 管理
-
-支持两种方式：
-
-1. **直接配置**：在 values.yaml 中配置 apiKey
-2. **外部 Secret**：引用已存在的 K8S Secret
-
-```yaml
-# 方式 1：直接配置
-registry:
-  llm:
-    chat:
-      apiKey: "sk-xxx"
-
-# 方式 2：外部 Secret
-registry:
-  llm:
-    chat:
-      existingSecret: "my-llm-secret"
-      existingSecretKey: "api-key"
-```
-
-### 5.2 证书管理
-
-Registry Center 需要两类证书：
+#### 证书类型
 
 | 证书类型 | 用途 | 容器路径 | 文件名 |
-|----------|------|----------|--------|
+|:---------|:-----|:---------|:-------|
 | TLS 证书 | HTTPS 通信 | `etc/ssl/` | server.cer, server_key.pem, trust.cer, cert_pwd |
 | JWS 签名证书 | Agent Card 签名 | `etc/sign_cert/` | server.cer, server_key.pem, cert_pwd |
 
-**证书模式设计：**
+#### 证书模式
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                        证书模式选择                                   │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                     │
-│  mode: auto (默认，推荐)                                             │
-│  ├── Helm 模板调用 genCA() + genSignedCert() 生成自签名证书          │
-│  ├── 证书数据写入 K8S Secret (registry-center-tls / -signing)       │
-│  ├── Deployment 挂载 Secret 到 etc/ssl 和 etc/sign_cert             │
-│  ├── entrypoint 检测到证书文件已存在 → 跳过自动生成                   │
-│  ├── helm upgrade 时通过 lookup() 保留已有证书，不重新生成            │
-│  └── 多副本共享同一 Secret → 证书一致 ✓                              │
-│                                                                     │
-│  mode: secret                                                       │
-│  ├── 用户预创建 K8S Secret (正式证书 / 自定义 CA)                    │
-│  ├── Deployment 挂载用户 Secret                                      │
-│  └── 适用于需要正式 CA 签发证书的生产环境                             │
-│                                                                     │
-│  mode: off                                                          │
-│  ├── 不挂载任何证书 volume                                           │
-│  ├── entrypoint 每次启动自动生成自签名证书到容器文件系统              │
-│  ├── 容器重启 → 证书丢失 → 重新生成                                  │
-│  └── 仅用于开发调试，不用于生产                                       │
-│                                                                     │
-└─────────────────────────────────────────────────────────────────────┘
-```
+| 模式 | 说明 | 多副本 | 适用场景 |
+|:-----|:-----|:-------|:---------|
+| `auto` (默认) | Helm 用 `genCA`/`genSignedCert` 自动生成，存入 Secret | 一致 | 推荐，所有场景 |
+| `secret` | 从用户预创建的 K8S Secret 挂载 | 一致 | 需要正式证书 |
+| `off` | entrypoint 每次启动自动生成，不持久化 | 不一致 | 仅开发调试 |
 
-**auto 模式流程图：**
+#### auto 模式流程
 
 ```
 helm install / helm upgrade
     │
     ▼
-cert-secret.yaml 模板渲染
+tls-secret.yaml / signing-secret.yaml 模板渲染
     │
     ├── lookup("v1", "Secret", ns, "registry-center-tls")
     │       │
@@ -384,9 +345,10 @@ entrypoint 检测
     └── 证书文件不存在 → 自动生成 (mode=off 时)
 ```
 
-**Helm 模板关键代码 (cert-secret.yaml)：**
+#### Helm 模板关键代码
 
 ```yaml
+# tls-secret.yaml
 {{- $existingTls := lookup "v1" "Secret" .Values.namespace "registry-center-tls" -}}
 {{- if $existingTls }}
 # 复用已有证书
@@ -403,7 +365,7 @@ data:
 {{- end }}
 ```
 
-**Deployment 挂载逻辑：**
+#### Deployment 挂载逻辑
 
 ```yaml
 {{- if ne .Values.registry.tls.mode "off" }}
@@ -423,83 +385,324 @@ volumes:
     {{- end }}
 ```
 
-### 5.3 网络安全
+### 3.2.3、单机 Docker Compose 部署模块
 
-- 所有服务使用 ClusterIP，仅集群内部可访问
-- 通过 Ingress 暴露外部访问
+#### 设计理念
+
+- **零依赖**：无需 Kubernetes 集群，仅需 Docker + Docker Compose
+- **一键部署**：`deploy.sh` 脚本自动完成环境检查、构建、启动、健康检查
+- **完全复用镜像**：与 Helm Chart 使用相同的 Dockerfile 构建镜像
+
+#### 文件结构
+
+```
+k8s/deploy-standalone/
+├── docker-compose.yml          # 统一编排：postgres + registry + orchestration
+├── init-db.sh                  # PostgreSQL 多数据库初始化脚本
+├── .env.example                # 环境变量模板
+└── deploy.sh                   # 一键部署脚本
+```
+
+#### 核心设计
+
+##### 共享 PostgreSQL
+
+与 Helm Chart 方案一致，单实例多数据库：
+
+```yaml
+# docker-compose.yml
+postgres:
+  image: postgres:15-alpine
+  volumes:
+    - pgdata:/var/lib/postgresql/data
+    - ./init-db.sh:/docker-entrypoint-initdb.d/init-db.sh:ro
+```
+
+`init-db.sh` 自动创建 `registry_center` 和 `orchestration_center` 两个数据库。
+
+##### 服务依赖与健康检查
+
+```yaml
+orchestration-center:
+  depends_on:
+    postgres:
+      condition: service_healthy    # 等待 PG 就绪
+    registry-center:
+      condition: service_started    # Registry 启动即可
+```
+
+##### 服务发现
+
+Orchestration Center 通过 Docker 内部网络发现 Registry Center：
+
+```yaml
+environment:
+  AGENT_REGISTRY_URL: http://registry-center:5000
+```
+
+##### 环境变量配置
+
+通过 `.env` 文件统一管理，支持 LLM API Key 等敏感配置：
+
+```bash
+# .env
+DB_PASSWORD=openan123
+LLM_CHAT_MODEL=deepseek-chat
+LLM_CHAT_URL=https://api.deepseek.com/v1/chat/completions
+REGISTRY_LLM_API_KEY=sk-xxx
+ORCHESTRATION_LLM_API_KEY=sk-yyy
+```
+
+#### 部署流程
+
+```
+deploy.sh
+    │
+    ├── 1. 检查 Docker / Docker Compose
+    │
+    ├── 2. 首次运行：复制 .env.example → .env
+    │       └── 提示用户编辑 LLM API Key
+    │
+    ├── 3. 检查源码目录
+    │       ├── REGISTRY_SRC (默认 ../../registry-center)
+    │       └── ORCHESTRATION_SRC (默认 ..)
+    │
+    ├── 4. docker compose build (构建镜像)
+    │
+    ├── 5. docker compose up -d (启动服务)
+    │
+    ├── 6. 等待健康检查
+    │       ├── PostgreSQL: pg_isready
+    │       ├── Registry Center: /rest/v1/registry-center/agent-cards
+    │       └── Orchestration Center: /rest/v1/orchestrate/agent-cards
+    │
+    └── 7. 输出访问地址
+            ├── Registry Center:     http://localhost:5000
+            └── Orchestration Center: http://localhost:5001
+```
+
+#### 与 Helm Chart 对比
+
+| 维度 | Helm Chart | Docker Compose |
+|:-----|:-----------|:---------------|
+| 适用场景 | 生产/多节点 | 开发/单机/演示 |
+| 依赖 | K8S + Helm | Docker + Docker Compose |
+| 多副本 | 支持 | 不支持 |
+| 自动伸缩 | HPA | 无 |
+| 证书管理 | auto/secret/off | entrypoint 自动生成 |
+| 负载均衡 | Ingress | 无 |
+| 持久化 | PVC | Docker Volume |
+| 镜像 | 同一 Dockerfile | 同一 Dockerfile |
+
+### 3.2.4、模块接口定义
+
+#### 内部接口
+
+| 接口 | 提供方 | 消费方 | 协议 | 说明 |
+|:-----|:-------|:-------|:-----|:-----|
+| `/rest/v1/registry-center/agent-cards` | registry-center | orchestration-center | HTTP | Agent Card 查询 |
+| `/rest/v1/orchestrate/agent-cards` | orchestration-center | 外部 | HTTP | 健康检查 |
+| PostgreSQL :5432 | openan-postgres | registry-center, orchestration-center | TCP | 数据库连接 |
+
+#### 外部接口
+
+| 接口 | 提供方 | 消费方 | 协议 | 说明 |
+|:-----|:-------|:-------|:-----|:-----|
+| Ingress `/` | orchestration-center | 用户 | HTTPS | 编排中心 API |
+| Ingress `/registry` | registry-center | 用户 | HTTPS | 注册中心 API |
+| LLM API | DeepSeek/OpenAI | registry-center, orchestration-center | HTTPS | 大模型服务 |
+
+## 3.3、Story 分解
+
+### 3.3.1、Story 列表
+
+| Story | 描述 | 优先级 |
+|:------|:-----|:-------|
+| S1: Namespace 创建 | 创建 openan 命名空间 | P0 |
+| S2: PostgreSQL 部署 | 部署共享 PostgreSQL 实例 | P0 |
+| S3: Registry Center 部署 | 部署注册中心服务 | P0 |
+| S4: Orchestration Center 部署 | 部署编排中心服务 | P0 |
+| S5: 证书自动生成 | Helm 自动生成 TLS/JWS 证书 | P1 |
+| S6: Ingress 配置 | 配置统一入口和路由 | P1 |
+| S7: HPA 自动伸缩 | 配置自动伸缩策略 | P2 |
+
+### 3.3.2、Story 设计
+
+#### S1: Namespace 创建
+
+**功能描述**：创建独立的 openan 命名空间，隔离资源
+
+**验收标准**：
+- Namespace 名称为 `openan`
+- 包含标签 `app.kubernetes.io/part-of: openan`
+
+**接口清单**：无
+
+#### S2: PostgreSQL 部署
+
+**功能描述**：部署共享 PostgreSQL 实例，自动创建多个数据库
+
+**验收标准**：
+- PostgreSQL 版本 15-alpine
+- 自动创建 `registry_center` 和 `orchestration_center` 数据库
+- 数据持久化到 PVC (默认 20Gi)
+- 健康检查使用 `pg_isready`
+
+**接口清单**：
+- Service: `openan-postgres:5432`
+
+#### S3: Registry Center 部署
+
+**功能描述**：部署注册中心服务，支持多副本
+
+**验收标准**：
+- 默认 2 副本
+- 端口 5000
+- 挂载 TLS 和 JWS 证书
+- 健康检查端点 `/rest/v1/registry-center/agent-cards`
+
+**接口清单**：
+- Service: `registry-center:5000`
+
+#### S4: Orchestration Center 部署
+
+**功能描述**：部署编排中心服务，支持多副本和自动伸缩
+
+**验收标准**：
+- 默认 2 副本
+- 端口 5001
+- 自动发现 Registry Center
+- 健康检查端点 `/rest/v1/orchestrate/agent-cards`
+
+**接口清单**：
+- Service: `orchestration-center:5001`
+
+#### S5: 证书自动生成
+
+**功能描述**：Helm 自动生成自签名证书，支持升级时保留
+
+**验收标准**：
+- 使用 `genCA` 和 `genSignedCert` 生成证书
+- 证书存入 Secret
+- `helm upgrade` 时通过 `lookup` 保留已有证书
+- 多副本共享同一证书
+
+**接口清单**：
+- Secret: `registry-center-tls`
+- Secret: `registry-center-signing`
+
+#### S6: Ingress 配置
+
+**功能描述**：配置 Nginx Ingress，统一入口
+
+**验收标准**：
 - 支持 TLS 终止
+- 路径 `/` 路由到 orchestration-center
+- 路径 `/registry` 路由到 registry-center
+- 超时配置 300s
 
-### 5.3 生产建议
+**接口清单**：
+- Ingress: `openan-ingress`
 
-| 建议 | 说明 |
-|------|------|
-| 使用外部 Secret 管理 | Vault、AWS Secrets Manager 等 |
-| 启用 TLS | cert-manager 自动签发证书 |
-| 网络策略 | NetworkPolicy 限制 Pod 间通信 |
-| 镜像安全 | 私有仓库 + 镜像签名 |
-| 资源配额 | ResourceQuota 限制命名空间资源 |
+#### S7: HPA 自动伸缩
 
-## 6. 部署场景
+**功能描述**：配置 Orchestration Center 自动伸缩
 
-### 6.1 开发环境
+**验收标准**：
+- 最小副本 2，最大副本 10
+- CPU 阈值 70%
+- Memory 阈值 80%
 
-```bash
-helm install openan-dev ./k8s/openan-chart \
-  -n openan-dev --create-namespace \
-  --set postgresql.storage=10Gi \
-  --set registry.replicas=1 \
-  --set orchestration.replicas=1 \
-  --set orchestration.hpa.enabled=false
-```
+**接口清单**：
+- HPA: `orchestration-center`
 
-### 6.2 生产环境
+## 3.4、质量属性设计
 
-```bash
-helm install openan-prod ./k8s/openan-chart \
-  -n openan-prod --create-namespace \
-  -f values-prod.yaml
-```
+### 3.4.1、性能规格
 
-### 6.3 仅 Registry Center
+| 规格名称 | 规格指标 |
+|:---------|:---------|
+| 内存占用 | Registry: 512Mi, Orchestration: 1Gi |
+| 启动时间 | < 60s (含数据库初始化) |
+| 响应时间 | API < 500ms (不含 LLM 调用) |
+| 并发能力 | 单实例 80 并发 (uvicorn workers) |
 
-```bash
-helm install openan ./k8s/openan-chart \
-  -n openan --create-namespace \
-  --set orchestration.enabled=false
-```
+### 3.4.2、可靠性设计
 
-### 6.4 外部数据库
+| 设计点 | 实现方式 |
+|:-------|:---------|
+| 多副本 | Registry 2 副本，Orchestration 2-10 副本 |
+| Pod 反亲和 | 优先调度到不同节点 |
+| 优雅终止 | terminationGracePeriodSeconds: 120 |
+| 健康检查 | startup/liveness/readiness 三探针 |
+| 数据持久化 | PostgreSQL PVC 持久化 |
+| 自动恢复 | Deployment 自动重启失败 Pod |
 
-```bash
-helm install openan ./k8s/openan-chart \
-  -n openan --create-namespace \
-  --set postgresql.enabled=false \
-  --set postgresql.externalHost=your-db.example.com
-```
+### 3.4.3、安全/韧性/隐私设计
 
-## 7. 两种方式对比
+| 设计点 | 实现方式 |
+|:-------|:---------|
+| Secret 管理 | K8S Secret，支持外部 Secret 引用 |
+| 证书管理 | auto 模式自动生成，secret 模式用户自定义 |
+| 网络隔离 | ClusterIP Service，仅集群内部访问 |
+| TLS 终止 | Ingress 支持 TLS |
+| 只读挂载 | 证书 volumeMount readOnly: true |
+| 资源限制 | 设置 requests/limits 防止资源滥用 |
 
-| 维度 | 纯 YAML | Helm Chart |
-|------|---------|------------|
-| **复杂度** | 低 | 中 |
-| **灵活性** | 中 | 高 |
-| **可维护性** | 低（多环境需多套文件） | 高（values 覆盖） |
-| **可选组件** | 手动排除文件 | `--set enabled=false` |
-| **配置管理** | 直接编辑 YAML | values.yaml + 命令行 |
-| **版本管理** | 无 | Chart 版本化 |
-| **升级回滚** | 手动 | `helm upgrade/rollback` |
-| **学习成本** | 零 | 需学 Helm |
-| **适用场景** | 快速验证、简单部署 | 生产环境、多环境管理 |
+### 3.4.4、兼容性设计
 
-## 8. 总结
+| 设计点 | 实现方式 |
+|:-------|:---------|
+| Kubernetes 版本 | 支持 1.24+ |
+| 数据库 | 支持内置 PostgreSQL 和外部数据库 |
+| 证书模式 | auto/secret/off 三种模式 |
+| Helm 版本 | 支持 Helm 3.x |
 
-两种部署方式各有优势：
+### 3.4.5、可服务性设计
 
-- **纯 YAML**：适合快速上手、简单场景，零学习成本
-- **Helm Chart**：适合生产环境、多配置管理，支持可选组件和多环境
+| 设计点 | 实现方式 |
+|:-------|:---------|
+| 日志 | 标准输出，可通过 kubectl logs 查看 |
+| 监控 | 健康检查端点，可接入 Prometheus |
+| 升级 | Helm upgrade 支持滚动升级 |
+| 回滚 | Helm rollback 支持快速回滚 |
+| 配置更新 | ConfigMap/Secret 更新后重启 Pod 生效 |
 
-建议：
-- 开发/测试环境：使用纯 YAML 快速验证
-- 生产环境：使用 Helm Chart 管理配置和版本
+### 3.4.6、可测试性设计
 
-两种方式可以共存，用户根据实际需求选择。
+| 设计点 | 实现方式 |
+|:-------|:---------|
+| 开发环境 | 单副本，禁用 HPA，小存储 |
+| 健康检查 | 轻量级 API 端点 |
+| 可选组件 | orchestration.enabled=false 可跳过 |
+| 外部数据库 | postgresql.enabled=false 可跳过内置 PG |
+
+# 4、需求分解分配表
+
+| 序号 | 模块名称 | Story 名称 | Story 描述 |
+|:-----|:---------|:-----------|:-----------|
+| 1 | 基础设施 | S1: Namespace 创建 | 创建 openan 命名空间 |
+| 2 | 基础设施 | S2: PostgreSQL 部署 | 部署共享 PostgreSQL 实例 |
+| 3 | 应用服务 | S3: Registry Center 部署 | 部署注册中心服务 |
+| 4 | 应用服务 | S4: Orchestration Center 部署 | 部署编排中心服务 |
+| 5 | 安全 | S5: 证书自动生成 | Helm 自动生成 TLS/JWS 证书 |
+| 6 | 网络 | S6: Ingress 配置 | 配置统一入口和路由 |
+| 7 | 弹性 | S7: HPA 自动伸缩 | 配置自动伸缩策略 |
+
+# 5、修改日志
+
+| 版本 | 发布说明 |
+|:-----|:---------|
+| 1.0 | 初始版本，支持纯 YAML 和 Helm Chart 两种部署方式 |
+| 1.1 | 增加证书自动生成模块，支持 auto/secret/off 三种模式 |
+| 1.2 | 按 Feature-Design 模板重构文档 |
+| 1.3 | 移除纯 YAML 部署方式，仅保留 Helm Chart |
+| 1.4 | 增加单机 Docker Compose 部署模块，支持一键式容器化部署 |
+
+# 6、参考目录
+
+1. [Kubernetes 官方文档](https://kubernetes.io/docs/)
+2. [Helm 官方文档](https://helm.sh/docs/)
+3. [OpenAN Helm Chart 部署指南](./k8s-deployment-guide.md)
+4. [Registry Center 设计文档](../registry-center/docs/)
+5. [Orchestration Center 设计文档](./DESIGN.md)

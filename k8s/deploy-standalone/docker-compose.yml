@@ -1,0 +1,124 @@
+# OpenAN Platform - Standalone Docker Deployment
+# Copyright (c) 2026 Huawei Technologies Co., Ltd.
+# All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: openan-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-openan123}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./init-db.sh:/docker-entrypoint-initdb.d/init-db.sh:ro
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - openan-net
+
+  # Registry Center
+  registry-center:
+    build:
+      context: ${REGISTRY_SRC:-../../registry-center}
+      dockerfile: Dockerfile
+    image: registry-center:${REGISTRY_TAG:-latest}
+    container_name: openan-registry-center
+    environment:
+      REGISTRY_IP: 0.0.0.0
+      REGISTRY_PORT: 5000
+      REGISTRY_ENABLE_HTTPS: "false"
+      REGISTRY_FORWARDED_ALLOW_IPS: "*"
+      REGISTRY_OWNER__VALIDATION__MODE: relaxed
+      PERSISTENCE_MODE: postgresql
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: registry_center
+      DB_USERNAME: registry
+      DB_PASSWORD: ${DB_PASSWORD:-openan123}
+      DB_POOL_MIN: 2
+      DB_POOL_MAX: 10
+      LLM_CHAT_MODEL: ${LLM_CHAT_MODEL:-deepseek-chat}
+      LLM_CHAT_URL: ${LLM_CHAT_URL:-https://api.deepseek.com/v1/chat/completions}
+      LLM_CHAT_API_KEY: ${REGISTRY_LLM_API_KEY:-}
+      LLM_EMBED_MODEL: ${LLM_EMBED_MODEL:-bge-m3}
+      LLM_EMBED_URL: ${LLM_EMBED_URL:-}
+      LLM_EMBED_API_KEY: ${REGISTRY_LLM_EMBED_API_KEY:-}
+      LLM_RERANK_MODEL: ${LLM_RERANK_MODEL:-bge-reranker-v2-m3}
+      LLM_RERANK_URL: ${LLM_RERANK_URL:-}
+      LLM_RERANK_API_KEY: ${REGISTRY_LLM_RERANK_API_KEY:-}
+      USE_VECTORDB: "false"
+    ports:
+      - "5000:5000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/rest/v1/registry-center/agent-cards"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    networks:
+      - openan-net
+
+  # Orchestration Center
+  orchestration-center:
+    build:
+      context: ${ORCHESTRATION_SRC:-..}
+      dockerfile: Dockerfile
+    image: orchestration-center:${ORCHESTRATION_TAG:-latest}
+    container_name: openan-orchestration-center
+    environment:
+      ORCH_IP: 0.0.0.0
+      ORCH_PORT: 5001
+      ORCH_ENABLE_HTTPS: "false"
+      ORCH_FORWARDED_ALLOW_IPS: "*"
+      PERSISTENCE_MODE: postgresql
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: orchestration_center
+      DB_USERNAME: opena2a_t
+      DB_PASSWORD: ${DB_PASSWORD:-openan123}
+      AGENT_REGISTRY_URL: http://registry-center:5000
+      LLM_CHAT_MODEL: ${LLM_CHAT_MODEL:-deepseek-chat}
+      LLM_CHAT_URL: ${LLM_CHAT_URL:-https://api.deepseek.com/v1/chat/completions}
+      LLM_CHAT_API_KEY: ${ORCHESTRATION_LLM_API_KEY:-}
+      A2AT_LLM_PROVIDER: ${A2AT_LLM_PROVIDER:-deepseek}
+      A2AT_LLM_MODEL: ${A2AT_LLM_MODEL:-deepseek-chat}
+      A2AT_LLM_API_KEY: ${ORCHESTRATION_A2AT_API_KEY:-}
+      A2AT_LLM_BASE_URL: ${A2AT_LLM_BASE_URL:-https://api.deepseek.com}
+    ports:
+      - "5001:5001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      registry-center:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5001/rest/v1/orchestrate/agent-cards"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    networks:
+      - openan-net
+
+volumes:
+  pgdata:
+
+networks:
+  openan-net:
+    driver: bridge
