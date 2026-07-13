@@ -76,6 +76,7 @@ log_info "Checking source directories..."
 
 REGISTRY_SRC="${REGISTRY_SRC:-../../registry-center}"
 ORCHESTRATION_SRC="${ORCHESTRATION_SRC:-..}"
+WORKFLOW_DESIGNER_SRC="${WORKFLOW_DESIGNER_SRC:-../../workflow-designer}"
 
 if [ ! -d "$REGISTRY_SRC" ]; then
     log_error "Registry Center source not found at: $REGISTRY_SRC"
@@ -90,6 +91,13 @@ if [ ! -d "$ORCHESTRATION_SRC" ]; then
     exit 1
 fi
 log_info "Orchestration Center source: $ORCHESTRATION_SRC"
+
+if [ ! -d "$WORKFLOW_DESIGNER_SRC" ]; then
+    log_error "Workflow Designer source not found at: $WORKFLOW_DESIGNER_SRC"
+    log_error "Please set WORKFLOW_DESIGNER_SRC environment variable or place workflow-designer in the expected location"
+    exit 1
+fi
+log_info "Workflow Designer source: $WORKFLOW_DESIGNER_SRC"
 
 # =============================================================================
 # Step 4: Build images
@@ -140,6 +148,10 @@ wait_for_service "Registry Center" "http://localhost:5000/rest/v1/registry-cente
 log_info "Waiting for Orchestration Center..."
 wait_for_service "Orchestration Center" "http://localhost:5001/rest/v1/orchestrate/agent-cards" || true
 
+# Wait for Workflow Designer
+log_info "Waiting for Workflow Designer..."
+wait_for_service "Workflow Designer" "http://localhost:3003/" || true
+
 # =============================================================================
 # Step 7: Show status
 # =============================================================================
@@ -149,9 +161,10 @@ log_info "OpenAN Platform Deployment Complete!"
 log_info "=========================================="
 echo ""
 echo "Services:"
-echo "  - PostgreSQL:          localhost:5432"
-echo "  - Registry Center:     http://localhost:5000"
+echo "  - PostgreSQL:           localhost:5432"
+echo "  - Registry Center:      http://localhost:5000"
 echo "  - Orchestration Center: http://localhost:5001"
+echo "  - Workflow Designer:    http://localhost:3003"
 echo ""
 echo "Useful commands:"
 echo "  - View logs:    $COMPOSE_CMD logs -f"
