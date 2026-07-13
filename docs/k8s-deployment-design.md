@@ -510,7 +510,182 @@ deploy.sh
 | 持久化 | PVC | Docker Volume |
 | 镜像 | 同一 Dockerfile | 同一 Dockerfile |
 
-### 3.2.4、模块接口定义
+### 3.2.4、镜像管理
+
+#### 镜像构建流程
+
+OpenAN 平台包含三个组件，每个组件都有独立的 Dockerfile：
+
+| 组件 | Dockerfile 位置 | 默认镜像名 |
+|------|----------------|-----------|
+| Registry Center | `registry-center/Dockerfile` | `registry-center:latest` |
+| Orchestration Center | `orchestration-center/Dockerfile` | `orchestration-center:latest` |
+| Workflow Designer | `orchestration-center/workflow-designer/Dockerfile` | `workflow-designer:latest` |
+
+#### 构建方式
+
+**方式一：使用构建脚本（推荐）**
+
+```bash
+# 本地构建（不推送）
+./k8s/build-images.sh
+
+# 构建并推送到私有仓库
+./k8s/build-images.sh \
+  --registry harbor.example.com \
+  --namespace openan \
+  --tag v1.0.0 \
+  --push
+```
+
+**方式二：手动构建**
+
+```bash
+# 构建 Registry Center
+cd registry-center
+docker build -t your-registry.com/openan/registry-center:v1.0.0 .
+docker push your-registry.com/openan/registry-center:v1.0.0
+
+# 构建 Orchestration Center
+cd orchestration-center
+docker build -t your-registry.com/openan/orchestration-center:v1.0.0 .
+docker push your-registry.com/openan/orchestration-center:v1.0.0
+
+# 构建 Workflow Designer
+cd orchestration-center/workflow-designer
+docker build -t your-registry.com/openan/workflow-designer:v1.0.0 .
+docker push your-registry.com/openan/workflow-designer:v1.0.0
+```
+
+#### Helm Chart 镜像配置
+
+构建完成后，通过 values.yaml 或命令行参数指定镜像地址：
+
+```yaml
+# values.yaml
+registry:
+  image:
+    repository: your-registry.com/openan/registry-center
+    tag: v1.0.0
+    pullPolicy: IfNotPresent
+
+orchestration:
+  image:
+    repository: your-registry.com/openan/orchestration-center
+    tag: v1.0.0
+    pullPolicy: IfNotPresent
+
+frontend:
+  image:
+    repository: your-registry.com/openan/workflow-designer
+    tag: v1.0.0
+    pullPolicy: IfNotPresent
+```
+
+或使用命令行覆盖：
+
+```bash
+helm install openan ./k8s/openan-chart \
+  --set registry.image.repository=your-registry.com/openan/registry-center \
+  --set registry.image.tag=v1.0.0 \
+  --set orchestration.image.repository=your-registry.com/openan/orchestration-center \
+  --set orchestration.image.tag=v1.0.0 \
+  --set frontend.image.repository=your-registry.com/openan/workflow-designer \
+  --set frontend.image.tag=v1.0.0
+```
+
+#### 私有仓库认证
+
+如果使用私有镜像仓库，需要创建 imagePullSecret：
+
+```bash
+# 创建 Secret
+kubectl create secret docker-registry registry-secret \
+  --docker-server=your-registry.com \
+  --docker-username=admin \
+  --docker-password=your-password \
+  --namespace=openan
+```
+
+在 values.yaml 中配置：
+
+```yaml
+registry:
+  imagePullSecrets:
+    - name: registry-secret
+
+orchestration:
+  imagePullSecrets:
+    - name: registry-secret
+
+frontend:
+  imagePullSecrets:
+    - name: registry-secret
+```
+
+#### CI/CD 集成建议
+
+**GitHub Actions 示例：**
+
+```yaml
+name: Build and Push Images
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Login to Registry
+        uses: docker/login-action@v2
+        with:
+          registry: ${{ secrets.REGISTRY_URL }}
+          username: ${{ secrets.REGISTRY_USERNAME }}
+          password: ${{ secrets.REGISTRY_PASSWORD }}
+      
+      - name: Build and Push Registry Center
+        uses: docker/build-push-action@v4
+        with:
+          context: ../registry-center
+          push: true
+          tags: ${{ secrets.REGISTRY_URL }}/openan/registry-center:${{ github.ref_name }}
+      
+      - name: Build and Push Orchestration Center
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          push: true
+          tags: ${{ secrets.REGISTRY_URL }}/openan/orchestration-center:${{ github.ref_name }}
+      
+      - name: Build and Push Workflow Designer
+        uses: docker/build-push-action@v4
+        with:
+          context: ./workflow-designer
+          push: true
+          tags: ${{ secrets.REGISTRY_URL }}/openan/workflow-designer:${{ github.ref_name }}
+```
+
+#### 本地开发环境
+
+本地开发时，可以使用 `load` 方式将镜像导入 K3S/Minikube，无需推送到远程仓库：
+
+```bash
+# K3S
+docker save your-registry.com/openan/registry-center:dev | k3s ctr images import -
+
+# Minikube
+minikube image load your-registry.com/openan/registry-center:dev
+
+# Kind
+kind load docker-image your-registry.com/openan/registry-center:dev
+```
+
+### 3.2.5、模块接口定义
 
 #### 内部接口
 
