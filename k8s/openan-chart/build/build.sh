@@ -210,6 +210,12 @@ with open('$CONFIG_FILE', 'r') as f:
     config = yaml.safe_load(f)
 
 # 输出配置（仅在命令行未指定时使用）
+if config.get('registry', {}).get('url'):
+    print(f'REGISTRY="{config["registry"]["url"]}"')
+if config.get('registry', {}).get('namespace'):
+    print(f'NAMESPACE="{config["registry"]["namespace"]}"')
+if config.get('registry', {}).get('tag'):
+    print(f'TAG="{config["registry"]["tag"]}"')
 if not '$REGISTRY_SRC' and config.get('registry-center', {}).get('source'):
     print(f'REGISTRY_SRC="{config["registry-center"]["source"]}"')
 if not '$ORCHESTRATION_SRC' and config.get('orchestration-center', {}).get('source'):
