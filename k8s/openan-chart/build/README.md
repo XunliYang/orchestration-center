@@ -67,6 +67,72 @@ vim build-config.yaml
 
 注意：Workflow Designer 是 Orchestration Center 的子目录，默认使用 `{orchestration-center}/workflow-designer`，无需单独配置。
 
+## 多架构构建
+
+构建脚本默认支持多架构（amd64 + arm64），可以通过 `--platforms` 参数自定义目标平台。
+
+### 前置要求
+
+1. **安装 QEMU**（用于模拟不同架构）
+   ```bash
+   # Ubuntu/Debian
+   sudo apt-get install qemu-user-static
+   
+   # 或使用 Docker
+   docker run --privileged --rm tonistiigi/binfmt --install all
+   ```
+
+2. **创建 buildx builder**
+   ```bash
+   docker buildx create --name multiarch --use
+   ```
+
+### 构建多架构镜像
+
+```bash
+# 默认构建 amd64 + arm64
+./build.sh \
+  --registry-src /path/to/registry-center \
+  --orchestration-src /path/to/orchestration-center \
+  --push
+
+# 自定义目标平台
+./build.sh \
+  --registry-src /path/to/registry-center \
+  --orchestration-src /path/to/orchestration-center \
+  --platforms linux/amd64,linux/arm64,linux/arm/v7 \
+  --push
+
+# 仅构建单架构（更快）
+./build.sh \
+  --registry-src /path/to/registry-center \
+  --orchestration-src /path/to/orchestration-center \
+  --platforms linux/amd64 \
+  --push
+```
+
+### 验证多架构镜像
+
+```bash
+# 查看镜像支持的架构
+docker buildx imagetools inspect your-registry.com/openan/registry-center:latest
+
+# 输出示例：
+# Name: your-registry.com/openan/registry-center:latest
+# Manifests:
+#   Name: ...@sha256:abc123
+#   Platform: linux/amd64
+#   
+#   Name: ...@sha256:def456
+#   Platform: linux/arm64
+```
+
+### 注意事项
+
+1. **必须推送**：多架构镜像必须推送到仓库，无法在本地直接使用
+2. **构建时间**：多架构构建时间约为单架构的 N 倍（N = 架构数量）
+3. **仓库支持**：确保镜像仓库支持多架构 manifest（Docker Hub、Harbor、ACR 等都支持）
+
 ## 配置参数说明
 
 ### 命令行参数
@@ -85,6 +151,7 @@ vim build-config.yaml
 | `--orchestration-repo` | Orchestration Center Git 仓库 | `https://github.com/...` |
 | `--registry-branch` | Registry Center 分支 | `main` |
 | `--orchestration-branch` | Orchestration Center 分支 | `main` |
+| `--platforms` | 目标平台架构 | `linux/amd64,linux/arm64` |
 
 ### 配置文件参数
 

@@ -30,6 +30,7 @@ workflow-designer:
 build:
   push: false             # 构建后是否推送到仓库
   no-cache: false         # 是否禁用构建缓存
+  platforms: "linux/amd64,linux/arm64"  # 目标平台架构
 
 # 示例配置：
 # 

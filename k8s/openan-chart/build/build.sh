@@ -15,6 +15,7 @@
 #   --orchestration-repo <url>    Orchestration Center Git 仓库
 #   --registry-branch <branch>    Registry Center 分支 (默认: main)
 #   --orchestration-branch <branch>  Orchestration Center 分支 (默认: main)
+#   --platforms <platforms>       目标平台架构 (默认: linux/amd64,linux/arm64)
 #   --help                        显示帮助信息
 
 set -e
@@ -44,6 +45,9 @@ ORCHESTRATION_REPO=""
 # Git 分支
 REGISTRY_BRANCH="main"
 ORCHESTRATION_BRANCH="main"
+
+# 目标平台
+PLATFORMS="linux/amd64,linux/arm64"
 
 # 临时目录
 TEMP_DIR=""
@@ -95,6 +99,10 @@ Git 仓库选项:
   --orchestration-repo <url>    Orchestration Center Git 仓库
   --registry-branch <branch>    Registry Center 分支 (默认: main)
   --orchestration-branch <branch>  Orchestration Center 分支 (默认: main)
+
+多架构构建选项:
+  --platforms <platforms>       目标平台架构 (默认: linux/amd64,linux/arm64)
+                                示例: linux/amd64,linux/arm64,linux/arm/v7
 
 配置选项:
   --config <file>               使用配置文件 (默认: build-config.yaml)
@@ -172,6 +180,10 @@ parse_args() {
                 ORCHESTRATION_BRANCH="$2"
                 shift 2
                 ;;
+            --platforms)
+                PLATFORMS="$2"
+                shift 2
+                ;;
             --help)
                 show_help
                 ;;
@@ -212,6 +224,8 @@ if config.get('registry', {}).get('branch'):
     print(f'REGISTRY_BRANCH="{config["registry"]["branch"]}"')
 if config.get('orchestration', {}).get('branch'):
     print(f'ORCHESTRATION_BRANCH="{config["orchestration"]["branch"]}"')
+if config.get('build', {}).get('platforms'):
+    print(f'PLATFORMS="{config["build"]["platforms"]}"')
 EOF
 )
         else
@@ -299,59 +313,84 @@ prepare_sources() {
 
 # 构建镜像
 build_images() {
-    log_info "开始构建镜像..."
+    log_info "开始构建多架构镜像..."
+    log_info "目标平台: $PLATFORMS"
     
     # 镜像名称
     REGISTRY_IMAGE="$REGISTRY/$NAMESPACE/registry-center:$TAG"
     ORCHESTRATION_IMAGE="$REGISTRY/$NAMESPACE/orchestration-center:$TAG"
     FRONTEND_IMAGE="$REGISTRY/$NAMESPACE/workflow-designer:$TAG"
     
+    # 检查是否启用了 buildx
+    if ! docker buildx version &> /dev/null; then
+        log_error "docker buildx 未安装，无法构建多架构镜像"
+        log_error "请安装 Docker 19.03+ 并启用 buildx"
+        exit 1
+    fi
+    
+    # 创建或选择 builder
+    if ! docker buildx inspect multiarch-builder &> /dev/null; then
+        log_info "创建 buildx builder: multiarch-builder"
+        docker buildx create --name multiarch-builder --use
+    else
+        docker buildx use multiarch-builder
+    fi
+    
     # 构建 Registry Center
     log_info "[1/3] 构建 Registry Center..."
-    docker build -t "$REGISTRY_IMAGE" "$REGISTRY_SRC"
+    docker buildx build \
+        --platform "$PLATFORMS" \
+        -t "$REGISTRY_IMAGE" \
+        --push \
+        "$REGISTRY_SRC"
     log_info "✓ Registry Center 镜像: $REGISTRY_IMAGE"
     
     # 构建 Orchestration Center
     log_info "[2/3] 构建 Orchestration Center..."
-    docker build -t "$ORCHESTRATION_IMAGE" "$ORCHESTRATION_SRC"
+    docker buildx build \
+        --platform "$PLATFORMS" \
+        -t "$ORCHESTRATION_IMAGE" \
+        --push \
+        "$ORCHESTRATION_SRC"
     log_info "✓ Orchestration Center 镜像: $ORCHESTRATION_IMAGE"
     
     # 构建 Workflow Designer
     log_info "[3/3] 构建 Workflow Designer..."
-    docker build -t "$FRONTEND_IMAGE" "$FRONTEND_SRC"
+    docker buildx build \
+        --platform "$PLATFORMS" \
+        -t "$FRONTEND_IMAGE" \
+        --push \
+        "$FRONTEND_SRC"
     log_info "✓ Workflow Designer 镜像: $FRONTEND_IMAGE"
 }
 
-# 推送镜像
+# 推送镜像（多架构镜像已通过 --push 直接推送）
 push_images() {
-    if [ "$PUSH" = false ]; then
-        return
-    fi
-    
-    log_info "推送镜像到仓库..."
+    log_info "多架构镜像已在构建时推送到仓库"
+    log_info "验证镜像架构:"
     
     REGISTRY_IMAGE="$REGISTRY/$NAMESPACE/registry-center:$TAG"
     ORCHESTRATION_IMAGE="$REGISTRY/$NAMESPACE/orchestration-center:$TAG"
     FRONTEND_IMAGE="$REGISTRY/$NAMESPACE/workflow-designer:$TAG"
     
-    log_info "[1/3] 推送 Registry Center..."
-    docker push "$REGISTRY_IMAGE"
+    log_info "[1/3] Registry Center:"
+    docker buildx imagetools inspect "$REGISTRY_IMAGE" || true
     
-    log_info "[2/3] 推送 Orchestration Center..."
-    docker push "$ORCHESTRATION_IMAGE"
+    log_info "[2/3] Orchestration Center:"
+    docker buildx imagetools inspect "$ORCHESTRATION_IMAGE" || true
     
-    log_info "[3/3] 推送 Workflow Designer..."
-    docker push "$FRONTEND_IMAGE"
-    
-    log_info "✓ 所有镜像推送完成"
+    log_info "[3/3] Workflow Designer:"
+    docker buildx imagetools inspect "$FRONTEND_IMAGE" || true
 }
 
 # 显示结果
 show_result() {
     echo ""
     echo "=========================================="
-    echo "构建完成！"
+    echo "多架构镜像构建完成！"
     echo "=========================================="
+    echo ""
+    echo "目标平台: $PLATFORMS"
     echo ""
     echo "镜像列表:"
     echo "  - $REGISTRY/$NAMESPACE/registry-center:$TAG"
@@ -373,6 +412,13 @@ show_result() {
 main() {
     parse_args "$@"
     load_config
+    
+    # 多架构构建必须推送
+    if [ "$PUSH" = false ]; then
+        log_warn "多架构镜像必须推送到仓库，自动启用推送"
+        PUSH=true
+    fi
+    
     prepare_sources
     build_images
     push_images
