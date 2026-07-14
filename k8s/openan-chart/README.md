@@ -34,6 +34,10 @@ helm repo update
 # 基础安装（使用默认配置）
 helm install openan . --namespace openan --create-namespace
 
+# 如果命名空间已存在且不是由 Helm 管理的
+kubectl create namespace openan
+helm install openan . --namespace openan --set createNamespace=false
+
 # 自定义镜像仓库
 helm install openan . \
   --namespace openan \
@@ -109,6 +113,9 @@ curl http://localhost:5001/rest/v1/orchestrate/agent-cards
 | 参数 | 说明 | 默认值 |
 |------|------|--------|
 | `namespace` | Kubernetes 命名空间 | `openan` |
+| `createNamespace` | 是否由 Helm 创建命名空间 | `true` |
+
+**注意**：如果命名空间已存在且不是由 Helm 管理的，需要设置 `createNamespace=false`，否则会遇到 "namespace already exists" 错误。
 
 ### PostgreSQL 配置
 
@@ -277,6 +284,20 @@ helm install openan . \
   --set postgresql.password=your-password
 ```
 
+### 命名空间已存在
+
+如果命名空间已存在且不是由 Helm 管理的，需要手动创建命名空间并设置 `createNamespace=false`：
+
+```bash
+# 手动创建命名空间
+kubectl create namespace openan
+
+# 安装时禁用 Helm 创建命名空间
+helm install openan . \
+  --namespace openan \
+  --set createNamespace=false
+```
+
 ## 常用操作
 
 ### 升级
@@ -412,6 +433,25 @@ registry:
 ```
 
 ## 故障排查
+
+### Namespace 冲突
+
+如果遇到 "namespace already exists" 错误：
+
+```bash
+# 方案 1：删除现有命名空间后重新安装
+kubectl delete namespace openan
+helm install openan . --namespace openan --create-namespace
+
+# 方案 2：手动创建命名空间并设置 createNamespace=false
+kubectl create namespace openan
+helm install openan . --namespace openan --set createNamespace=false
+
+# 方案 3：清理 Helm release 缓存
+kubectl get secrets --all-namespaces | grep "sh.helm.release" | grep openan
+kubectl delete secret -l owner=helm,name=openan --all-namespaces
+helm install openan . --namespace openan --create-namespace
+```
 
 ### Pod 无法启动
 
