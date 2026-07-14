@@ -210,20 +210,20 @@ with open('$CONFIG_FILE', 'r') as f:
     config = yaml.safe_load(f)
 
 # 输出配置（仅在命令行未指定时使用）
-if not '$REGISTRY_SRC' and config.get('registry', {}).get('source'):
-    print(f'REGISTRY_SRC="{config["registry"]["source"]}"')
-if not '$ORCHESTRATION_SRC' and config.get('orchestration', {}).get('source'):
-    print(f'ORCHESTRATION_SRC="{config["orchestration"]["source"]}"')
-if not '$FRONTEND_SRC' and config.get('frontend', {}).get('source'):
-    print(f'FRONTEND_SRC="{config["frontend"]["source"]}"')
-if not '$REGISTRY_REPO' and config.get('registry', {}).get('repository'):
-    print(f'REGISTRY_REPO="{config["registry"]["repository"]}"')
-if not '$ORCHESTRATION_REPO' and config.get('orchestration', {}).get('repository'):
-    print(f'ORCHESTRATION_REPO="{config["orchestration"]["repository"]}"')
-if config.get('registry', {}).get('branch'):
-    print(f'REGISTRY_BRANCH="{config["registry"]["branch"]}"')
-if config.get('orchestration', {}).get('branch'):
-    print(f'ORCHESTRATION_BRANCH="{config["orchestration"]["branch"]}"')
+if not '$REGISTRY_SRC' and config.get('registry-center', {}).get('source'):
+    print(f'REGISTRY_SRC="{config["registry-center"]["source"]}"')
+if not '$ORCHESTRATION_SRC' and config.get('orchestration-center', {}).get('source'):
+    print(f'ORCHESTRATION_SRC="{config["orchestration-center"]["source"]}"')
+if not '$FRONTEND_SRC' and config.get('workflow-designer', {}).get('source'):
+    print(f'FRONTEND_SRC="{config["workflow-designer"]["source"]}"')
+if not '$REGISTRY_REPO' and config.get('registry-center', {}).get('repository'):
+    print(f'REGISTRY_REPO="{config["registry-center"]["repository"]}"')
+if not '$ORCHESTRATION_REPO' and config.get('orchestration-center', {}).get('repository'):
+    print(f'ORCHESTRATION_REPO="{config["orchestration-center"]["repository"]}"')
+if config.get('registry-center', {}).get('branch'):
+    print(f'REGISTRY_BRANCH="{config["registry-center"]["branch"]}"')
+if config.get('orchestration-center', {}).get('branch'):
+    print(f'ORCHESTRATION_BRANCH="{config["orchestration-center"]["branch"]}"')
 if config.get('build', {}).get('platforms'):
     print(f'PLATFORMS="{config["build"]["platforms"]}"')
 EOF
