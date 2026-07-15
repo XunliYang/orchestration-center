@@ -238,18 +238,3 @@ ingress:
     nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
     nginx.ingress.kubernetes.io/proxy-body-size: "50m"
 
-# =============================================================================
-# Ingress Controller Configuration
-# =============================================================================
-# 支持两种部署方案：NodePort（开发测试）或 LoadBalancer（生产环境）
-ingressController:
-  enabled: false  # 设为 true 部署 Ingress Controller，false 使用集群已有的
-  # Service 类型：NodePort（开发测试）或 LoadBalancer（生产环境）
-  serviceType: NodePort
-  # NodePort 配置（仅当 serviceType=NodePort 时生效）
-  nodePort:
-    http: 30083
-    https: 30443
-  # LoadBalancer 配置（仅当 serviceType=LoadBalancer 时生效）
-  loadBalancer:
-    ip: ""  # 指定 LoadBalancer IP，留空则自动分配
