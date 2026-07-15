@@ -227,7 +227,7 @@ frontend:
 ingress:
   enabled: true
   className: nginx
-  host: openan.example.com
+  host: openan.local
   # TLS configuration
   tls:
     enabled: false
