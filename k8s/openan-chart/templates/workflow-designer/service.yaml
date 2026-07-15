@@ -7,10 +7,11 @@ metadata:
   labels:
     {{- include "openan.frontend.labels" . | nindent 4 }}
 spec:
-  type: ClusterIP
+  type: NodePort
   ports:
     - port: {{ .Values.frontend.port }}
       targetPort: {{ .Values.frontend.port }}
+      nodePort: 30080
       protocol: TCP
       name: http
   selector:
