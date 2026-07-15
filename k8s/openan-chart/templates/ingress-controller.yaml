@@ -1,0 +1,116 @@
+{{- if .Values.ingressController.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ingress-nginx-controller
+  namespace: {{ .Values.namespace }}
+  labels:
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/component: controller
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ingress-nginx
+      app.kubernetes.io/component: controller
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: ingress-nginx
+        app.kubernetes.io/component: controller
+    spec:
+      containers:
+        - name: controller
+          image: registry.k8s.io/ingress-nginx/controller:v1.9.5@sha256:b3aba22b3a9bf37262897891d86281633ed6d28af3f095735981d8d4d892bca0
+          args:
+            - /nginx-ingress-controller
+            - --election-id=ingress-nginx-leader
+            - --controller-class=k8s.io/ingress-nginx
+            - --ingress-class=nginx
+            - --configmap=$(POD_NAMESPACE)/ingress-nginx-configuration
+            - --watch-ingress-without-class=true
+          env:
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+            - name: https
+              containerPort: 443
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 10254
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 10254
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ingress-nginx-controller
+  namespace: {{ .Values.namespace }}
+  labels:
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/component: controller
+spec:
+  {{- if eq .Values.ingressController.serviceType "LoadBalancer" }}
+  type: LoadBalancer
+  {{- if .Values.ingressController.loadBalancer.ip }}
+  loadBalancerIP: {{ .Values.ingressController.loadBalancer.ip }}
+  {{- end }}
+  {{- else }}
+  type: NodePort
+  {{- end }}
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+      protocol: TCP
+      {{- if eq .Values.ingressController.serviceType "NodePort" }}
+      nodePort: {{ .Values.ingressController.nodePort.http }}
+      {{- end }}
+    - name: https
+      port: 443
+      targetPort: https
+      protocol: TCP
+      {{- if eq .Values.ingressController.serviceType "NodePort" }}
+      nodePort: {{ .Values.ingressController.nodePort.https }}
+      {{- end }}
+  selector:
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/component: controller
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ingress-nginx-configuration
+  namespace: {{ .Values.namespace }}
+  labels:
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/component: controller
+data:
+  proxy-body-size: "50m"
+  proxy-read-timeout: "300"
+  proxy-send-timeout: "300"
+{{- end }}
