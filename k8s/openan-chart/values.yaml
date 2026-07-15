@@ -189,6 +189,9 @@ frontend:
     tag: latest
     pullPolicy: Always
   port: 80
+  # NodePort configuration (only used when service type is NodePort)
+  # Range: 30000-32767
+  nodePort: 30080
   # Resource limits
   resources:
     requests:
