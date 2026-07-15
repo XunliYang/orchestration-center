@@ -11,7 +11,7 @@ spec:
   ports:
     - port: {{ .Values.frontend.port }}
       targetPort: {{ .Values.frontend.port }}
-      nodePort: {{ .Values.frontend.nodePort | default 30080 }}
+      nodePort: {{ .Values.frontend.nodePort | default 30083 }}
       protocol: TCP
       name: http
   selector:
