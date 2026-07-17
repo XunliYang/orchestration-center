@@ -53,6 +53,7 @@ registry:
     tag: latest
     pullPolicy: Always
   port: 5000
+  nodePort: 30081
   # LLM configuration for registry-center
   llm:
     chat:
