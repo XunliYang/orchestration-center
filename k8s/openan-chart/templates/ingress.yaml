@@ -12,6 +12,8 @@ metadata:
     {{- include "openan.labels" . | nindent 4 }}
   annotations:
     {{- toYaml .Values.ingress.annotations | nindent 4 }}
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
 spec:
   ingressClassName: {{ .Values.ingress.className }}
   {{- if .Values.ingress.tls.enabled }}
@@ -34,8 +36,8 @@ spec:
                   number: {{ .Values.frontend.port }}
           {{- end }}
           {{- if .Values.registry.enabled }}
-          - path: /registry
-            pathType: Prefix
+          - path: /registry(/|$)(.*)
+            pathType: ImplementationSpecific
             backend:
               service:
                 name: registry-center

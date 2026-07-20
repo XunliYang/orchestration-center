@@ -100,11 +100,48 @@ kubectl get svc -n openan
 
 # 查看 Ingress
 kubectl get ingress -n openan
-
-# 测试 API
-curl http://localhost:5000/rest/v1/registry-center/agent-cards
-curl http://localhost:5001/rest/v1/orchestrate/agent-cards
 ```
+
+### 5. 通过 Ingress 访问 Registry Center
+
+Registry Center 通过 Ingress 暴露，路径前缀为 `/registry`。
+
+**配置 hosts（如果使用自定义域名）：**
+
+```bash
+# 假设 Ingress Controller 的 NodePort 为 30083
+# 添加以下到 /etc/hosts（Linux/Mac）或 C:\Windows\System32\drivers\etc\hosts（Windows）
+192.168.200.183  openan.local
+```
+
+**访问 Registry API：**
+
+```bash
+# 查询所有 Agent
+curl http://openan.local:30083/registry/rest/v1/registry-center/agent-cards
+
+# 注册新 Agent
+curl -X POST http://openan.local:30083/registry/rest/v1/registry-center/agent-cards \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "my-agent",
+    "description": "My custom agent",
+    "url": "http://my-agent:8080",
+    "version": "1.0.0"
+  }'
+
+# 查询特定 Agent
+curl http://openan.local:30083/registry/rest/v1/registry-center/agent-cards/my-agent
+
+# 删除 Agent
+curl -X DELETE http://openan.local:30083/registry/rest/v1/registry-center/agent-cards/my-agent
+```
+
+**路径重写规则：**
+
+Ingress 会自动将 `/registry` 前缀去掉：
+- 外部请求：`/registry/rest/v1/registry-center/agent-cards`
+- 转发到后端：`/rest/v1/registry-center/agent-cards`
 
 ## 配置参数
 
