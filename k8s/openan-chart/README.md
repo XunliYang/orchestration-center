@@ -162,8 +162,52 @@ Ingress 会自动将 `/registry` 前缀去掉：
 | `postgresql.externalHost` | 外部数据库地址 | `""` |
 | `postgresql.port` | 数据库端口 | `5432` |
 | `postgresql.password` | 数据库密码 | `"openan-db-password"` |
-| `postgresql.storage` | 存储大小 | `20Gi` |
-| `postgresql.storageClassName` | StorageClass 名称 | `""` |
+| `postgresql.storage.size` | 存储大小 | `20Gi` |
+| `postgresql.storage.createStorageClass` | 是否自动创建 StorageClass | `false` |
+| `postgresql.storage.createPV` | 是否自动创建 PV | `false` |
+| `postgresql.storage.storageClassName` | StorageClass 名称 | `"openan-local"` |
+| `postgresql.storage.setDefault` | 是否设为默认 StorageClass | `false` |
+| `postgresql.storage.reclaimPolicy` | 回收策略（Retain/Delete） | `"Retain"` |
+| `postgresql.storage.useHostPath` | 是否使用 hostPath（单节点集群） | `true` |
+| `postgresql.storage.hostPath` | hostPath 目录 | `"/data/openan-postgres"` |
+| `postgresql.storage.nodeName` | 节点名称（useHostPath=false 时） | `""` |
+
+**存储配置说明：**
+
+**场景一：集群已有默认 StorageClass**
+```yaml
+postgresql:
+  storage:
+    createStorageClass: false
+    createPV: false
+```
+
+**场景二：单节点集群，使用 hostPath**
+```yaml
+postgresql:
+  storage:
+    createStorageClass: true
+    createPV: true
+    useHostPath: true
+    hostPath: "/data/openan-postgres"
+```
+
+**场景三：多节点集群，使用 local volume**
+```yaml
+postgresql:
+  storage:
+    createStorageClass: true
+    createPV: true
+    useHostPath: false
+    localPath: "/data/openan-postgres"
+    nodeName: "node185"
+```
+
+**注意**：使用 hostPath 或 local volume 时，需要确保节点上已创建对应目录：
+```bash
+# 在目标节点上执行
+mkdir -p /data/openan-postgres
+```
 
 ### Registry Center 配置
 
