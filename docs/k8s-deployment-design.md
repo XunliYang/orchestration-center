@@ -113,7 +113,232 @@ Apache License 2.0
 | 可选性 | 必选 | 可选 | 可选 |
 | 资源限制 | 512Mi/500m | 1Gi/1000m | 256Mi/500m |
 
-### 3.1.3、部署流程图
+### 3.1.3、架构职责分离
+
+OpenAN 平台采用微服务架构，各组件职责明确分离：
+
+#### Registry Center（注册中心）
+
+**核心职责**：Agent 生命周期管理
+
+- **Agent Card 注册**：接收 Agent 注册请求，存储 Agent 元数据
+- **Agent Card 查询**：提供 Agent 列表查询和语义搜索
+- **Agent Card 更新/删除**：管理 Agent 状态变更
+- **签名验证**：使用 JWS 证书验证 Agent Card 签名
+- **TLS 证书**：提供 HTTPS 安全访问
+
+**API 端点**（通过 Ingress `/registry` 访问）：
+```bash
+# 注册 Agent
+POST /registry/rest/v1/registry-center/agent-cards
+
+# 查询所有 Agent
+GET /registry/rest/v1/registry-center/agent-cards
+
+# 查询特定 Agent
+GET /registry/rest/v1/registry-center/agent-cards/{organization}/{name}
+
+# 更新 Agent
+PUT /registry/rest/v1/registry-center/agent-cards/{organization}/{name}
+
+# 删除 Agent
+DELETE /registry/rest/v1/registry-center/agent-cards/{organization}/{name}
+
+# 语义搜索
+POST /registry/rest/v1/registry-center/agent-cards/semantic-query
+```
+
+**注意**：Registry Center 是**唯一**可以注册/管理 Agent 的组件。
+
+#### Orchestration Center（编排中心）
+
+**核心职责**：工作流编排和执行
+
+- **工作流管理**：创建、查询、删除工作流（PSOP）
+- **工作流生成**：基于意图或 PreFlow 生成工作流
+- **工作流执行**：执行工作流，协调多个 Agent 协作
+- **Agent Card 读取**：从 Registry Center 读取 Agent 信息（只读）
+- **PDF 解析**：解析 PDF 文档提取工作流信息
+
+**API 端点**（通过 Ingress `/rest/v1/orchestrate` 或直接访问）：
+```bash
+# 查询工作流列表
+GET /rest/v1/orchestrate/workflows
+
+# 创建工作流
+POST /rest/v1/orchestrate/workflows
+
+# 基于意图生成工作流
+POST /rest/v1/orchestrate/generate-from-intent
+
+# 执行工作流
+POST /rest/v1/orchestrate/execute
+
+# 查询 Agent Cards（只读，从 Registry Center 获取）
+GET /rest/v1/orchestrate/agent-cards
+```
+
+**注意**：Orchestration Center **不提供** Agent 注册 API，仅提供 Agent 查询 API。
+
+#### Workflow Designer（前端）
+
+**核心职责**：可视化工作流设计界面
+
+- **工作流可视化编辑**：拖拽式工作流设计器
+- **工作流管理界面**：查看、创建、删除工作流
+- **工作流执行监控**：实时查看工作流执行状态
+- **API 反向代理**：将前端 API 请求转发到 Orchestration Center
+
+**Nginx 反向代理配置**：
+```nginx
+# 前端 API 请求转发
+location /rest/v1/orchestrate/ {
+    proxy_pass http://orchestration-center:5001;
+}
+
+# 静态文件服务
+location / {
+    try_files $uri $uri/ /index.html;
+}
+```
+
+#### 服务间调用关系
+
+```
+用户 → Ingress (openan.local:30083)
+         ↓
+    ┌────┴────────────────────┬────────────────────┐
+    ↓                         ↓                    ↓
+  /rest/v1/orchestrate/*     /registry/*          /
+    ↓                         ↓                    ↓
+orchestration-center      registry-center      workflow-designer
+  - 工作流编排              - Agent 注册/管理     - 前端界面
+  - 读取 agent cards        - 提供 agent cards    - API 反向代理
+  - 不注册 agent              ↓
+                             ↓
+                    orchestration-center
+                    (内部 HTTP 调用)
+```
+
+**关键点**：
+1. **Orchestration Center → Registry Center**：内部 HTTP 调用，使用 K8S Service DNS（`http://registry-center:5000`）
+2. **Workflow Designer → Orchestration Center**：Nginx 反向代理，路径 `/rest/v1/orchestrate/*`
+3. **用户 → Registry Center**：通过 Ingress `/registry/*` 访问，需要路径重写
+
+### 3.1.4、Ingress 路由与路径重写
+
+#### Ingress 配置
+
+```yaml
+# ingress.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: openan-ingress
+  annotations:
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: openan.local
+      http:
+        paths:
+          # 前端入口
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: workflow-designer
+                port:
+                  number: 80
+          # Registry Center API（需要路径重写）
+          - path: /registry(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: registry-center
+                port:
+                  number: 5000
+```
+
+#### 路径重写规则
+
+**为什么需要路径重写？**
+
+Registry Center 的 API 路径是 `/rest/v1/registry-center/agent-cards`，但通过 Ingress 访问时需要加上 `/registry` 前缀以区分路由。
+
+**路径重写流程**：
+```
+外部请求：http://openan.local:30083/registry/rest/v1/registry-center/agent-cards
+         ↓ Ingress 匹配 /registry(/|$)(.*)
+         ↓ 捕获组 $2 = /rest/v1/registry-center/agent-cards
+         ↓ rewrite-target: /$2
+内部请求：http://registry-center:5000/rest/v1/registry-center/agent-cards
+```
+
+**正则表达式解析**：
+- `/registry(/|$)(.*)` - 匹配 `/registry` 后跟 `/` 或字符串结尾，然后捕获剩余部分
+- `(/|$)` - 匹配 `/` 或字符串结尾（确保 `/registry` 和 `/registry/` 都能匹配）
+- `(.*)` - 捕获剩余路径（包括前导 `/`）
+- `/$2` - 重写为捕获的第二组（即原始路径）
+
+#### 访问方式对比
+
+**方式一：通过 Ingress 访问（推荐）**
+
+```bash
+# 配置 hosts
+echo "192.168.200.183 openan.local" >> /etc/hosts
+
+# 访问前端
+http://openan.local:30083
+
+# 注册 Agent（通过 Registry Center）
+curl -X POST http://openan.local:30083/registry/rest/v1/registry-center/agent-cards \
+  -H "Content-Type: application/json" \
+  -d '{
+    "agentCards": [{
+      "name": "my-agent",
+      "description": "My custom agent",
+      "url": "http://my-agent:8080"
+    }]
+  }'
+
+# 查询 Agent（通过 Registry Center）
+curl http://openan.local:30083/registry/rest/v1/registry-center/agent-cards
+
+# 查询 Agent（通过 Orchestration Center，只读）
+curl http://openan.local:30083/rest/v1/orchestrate/agent-cards
+
+# 查询工作流
+curl http://openan.local:30083/rest/v1/orchestrate/workflows
+```
+
+**方式二：通过 NodePort 直接访问（开发测试）**
+
+```bash
+# 查看 NodePort
+kubectl get svc registry-center -n openan
+
+# 直接访问 Registry Center（无需路径重写）
+curl http://192.168.200.183:30081/rest/v1/registry-center/agent-cards
+
+# 直接访问 Orchestration Center
+curl http://192.168.200.183:30080/rest/v1/orchestrate/workflows
+```
+
+#### API 访问总结
+
+| 操作 | 通过 Ingress | 通过 NodePort |
+|------|-------------|---------------|
+| 注册 Agent | `POST /registry/rest/v1/registry-center/agent-cards` | `POST :30081/rest/v1/registry-center/agent-cards` |
+| 查询 Agent（Registry） | `GET /registry/rest/v1/registry-center/agent-cards` | `GET :30081/rest/v1/registry-center/agent-cards` |
+| 查询 Agent（Orchestration） | `GET /rest/v1/orchestrate/agent-cards` | `GET :30080/rest/v1/orchestrate/agent-cards` |
+| 查询工作流 | `GET /rest/v1/orchestrate/workflows` | `GET :30080/rest/v1/orchestrate/workflows` |
+| 创建工作流 | `POST /rest/v1/orchestrate/workflows` | `POST :30080/rest/v1/orchestrate/workflows` |
+
+### 3.1.5、部署流程图
 
 ```
 用户
@@ -918,6 +1143,7 @@ kind load docker-image your-registry.com/openan/registry-center:dev
 | 1.3 | 移除纯 YAML 部署方式，仅保留 Helm Chart |
 | 1.4 | 增加单机 Docker Compose 部署模块，支持一键式容器化部署 |
 | 1.5 | 增加 Workflow Designer 前端部署支持，完善 Ingress 路由配置 |
+| 1.6 | 增加架构职责分离说明，补充 Ingress 路径重写规则和 API 访问指南 |
 
 # 6、参考目录
 
