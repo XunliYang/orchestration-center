@@ -96,24 +96,10 @@ with open(path, 'w') as f:
     echo "Config override: llm_config.json[chat] updated from environment variables"
 fi
 
-# --- .env overrides (A2A-T SDK) ---
-if [ -f "${A2AT_ENV}" ]; then
-if [ -n "${A2AT_LLM_PROVIDER}" ]; then
-    sed -i "s#^A2AT_LLM_PROVIDER=.*#A2AT_LLM_PROVIDER=${A2AT_LLM_PROVIDER}#" "${A2AT_ENV}"
-    echo "Config override: A2AT_LLM_PROVIDER=${A2AT_LLM_PROVIDER}"
-fi
-if [ -n "${A2AT_LLM_MODEL}" ]; then
-    sed -i "s#^A2AT_LLM_MODEL=.*#A2AT_LLM_MODEL=${A2AT_LLM_MODEL}#" "${A2AT_ENV}"
-    echo "Config override: A2AT_LLM_MODEL=${A2AT_LLM_MODEL}"
-fi
-if [ -n "${A2AT_LLM_API_KEY}" ]; then
-    sed -i "s#^A2AT_LLM_API_KEY=.*#A2AT_LLM_API_KEY=${A2AT_LLM_API_KEY}#" "${A2AT_ENV}"
-    echo "Config override: A2AT_LLM_API_KEY=***"
-fi
-if [ -n "${A2AT_LLM_BASE_URL}" ]; then
-    sed -i "s#^A2AT_LLM_BASE_URL=.*#A2AT_LLM_BASE_URL=${A2AT_LLM_BASE_URL}#" "${A2AT_ENV}"
-    echo "Config override: A2AT_LLM_BASE_URL=${A2AT_LLM_BASE_URL}"
-fi
+# --- .env generation (A2A-T SDK) ---
+if [ -n "${A2AT_LLM_PROVIDER}" ] || [ -n "${A2AT_LLM_MODEL}" ] || [ -n "${A2AT_LLM_API_KEY}" ]; then
+    python3 -c "from common.a2at_config import ensure_env_file_exists; ensure_env_file_exists()"
+    echo "Config override: .env generated via ensure_env_file_exists()"
 fi
 
 # Ensure required directories exist
