@@ -256,6 +256,8 @@
       "agents.negotiation_t_extension": "Negotiation-T Capability"
     },
     "report": {
+      "scopeNotice": "This checks structure and Stub connectivity only. Routing is simulated as always allowed; real business branch decisions are not verified.",
+      "eventsTruncated": "A size or count limit was reached; some events or report details were not retained.",
       "checks": "Static Checks",
       "executionPath": "Execution Path",
       "contextTrace": "Context Trace",

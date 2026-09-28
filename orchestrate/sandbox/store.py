@@ -13,7 +13,10 @@ class SandboxStore:
 
     _ID_PATTERN = re.compile(r"^[\w\-]+$")
 
-    def __init__(self, base_dir: str | Path | None = None) -> None:
+    def __init__(self, base_dir: str | Path | None = None, *, max_report_bytes: int = 2_000_000) -> None:
+        if max_report_bytes < 1024:
+            raise ValueError("max_report_bytes must be at least 1024")
+        self.max_report_bytes = max_report_bytes
         base = Path(base_dir) if base_dir else Path("data") / "workflow_storage" / "sandbox"
         self.report_dir = base / "reports"
         self.template_dir = base / "templates"
@@ -32,6 +35,19 @@ class SandboxStore:
             "report": report.model_dump(mode="json"),
             "events": events,
         }
+        encoded = json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8")
+        if len(encoded) > self.max_report_bytes:
+            snapshot = payload["report"]
+            payload["events"] = []
+            snapshot["events_truncated"] = True
+            snapshot["report_truncated"] = True
+            for field in ("static_checks", "execution_path", "context_trace", "stub_interactions", "risks", "suggestions"):
+                snapshot[field] = []
+            if snapshot.get("error"):
+                snapshot["error"] = str(snapshot["error"])[:1000]
+            snapshot["workflow_name"] = str(snapshot["workflow_name"])[:256]
+            if len(json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8")) > self.max_report_bytes:
+                raise ValueError("Sandbox report exceeds configured size limit")
         self._write(self.report_dir / f"{report.verification_id}.json", payload)
         return report.verification_id
 

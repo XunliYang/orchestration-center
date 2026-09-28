@@ -47,8 +47,14 @@ describe("sandbox report view", () => {
         expect(html).toContain("agents.missing");
         expect(html).toContain("stub.task_failed");
         expect(html).toContain("sandbox.report.executionPath");
+        expect(html).toContain("sandbox.report.scopeNotice");
         expect(html).toContain(">a</span>");
         expect(html).toContain(">merge</span>");
+    });
+
+    it("discloses truncated event history", () => {
+        const html = renderToString(<SandboxReportView report={{ ...report, events_truncated: true }} isDark={false} />);
+        expect(html).toContain("sandbox.report.eventsTruncated");
     });
 });
 
