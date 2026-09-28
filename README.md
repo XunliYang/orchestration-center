@@ -1,4 +1,4 @@
-﻿<!--
+<!--
 Copyright (c) 2026 Huawei Technologies Co., Ltd.
 All Rights Reserved.
 
@@ -240,11 +240,11 @@ containers don't). It's dev-only and intentionally absent from
 > (`sample-agents:PORT` vs `127.0.0.1:PORT`) and whichever started last wins,
 > silently breaking calls from the other.
 
-Negotiation-capable sample agents need real chat-model credentials to do
-anything past startup — `common/config/llm_config.json` ships with a
-placeholder API key. Pass `LLM_CHAT_MODEL`/`LLM_CHAT_API_KEY`/`LLM_CHAT_URL`
-(host shell or a `.env` next to the compose file) to `sample-agents` for
-negotiation to actually work, not just for the container to start green.
+Negotiation-capable sample agents need a real chat model to do anything past
+startup. Give them a `chat` entry in `common/config/models.yaml` (or point
+`LLM_CONFIG_HOST_FILE` at a shared one) and put the secret it names — such as
+`LLM_CHAT_API_KEY` — in the `.env` next to the compose file. Without both, the
+containers start green but negotiation fails.
 
 Every value in `environment:` reads from the host shell (or a `.env` file
 next to the compose file) first, falling back to the default shown in the
@@ -486,41 +486,56 @@ The external API (`/api/v1/*`) is protected by mTLS at the TLS layer when `enabl
 | `etc/conf/server.conf` | Server IP, port, TLS certificates, persistence mode, registry URL, access password, `client_verify_server` |
 | `etc/conf/server.properties` | TLS ciphers, rate limiting, connection limits |
 | `etc/conf/db_config.json` | PostgreSQL connection settings — gitignored; copy `etc/conf/db_config.json.template` to get started (only needed for `persistence_mode=postgresql`) |
-| `common/config/llm_config.json` | LLM/embed/rerank model endpoints (overridable via `LLM_*`, see below) |
-| `.env` | Your local overrides — gitignored. Also where the negotiation SDK reads its `A2AT_*` variables directly (see below) |
+| `.env` | Local model settings and A2A-T SDK settings — gitignored; production should inject secrets through its environment |
 | `common/config/README_en.md` | LLM configuration guide |
 | `generate_selfsign_cert.py` | Self-signed certificate generator (RSA 3072) |
 | `workflow_engine.client.ssl_context` | Client-side SSL context factory for outbound HTTPS (provided by the workflow-engine SDK) |
 
 ## LLM configuration
 
-No provider is hardcoded. `common/config/llm_config.json` ships with placeholders and any
-OpenAI-compatible service works. Every scalar field can be overridden without touching the JSON,
-using `LLM_<CAPABILITY>_<FIELD>` — set it in your environment or in a `.env` at the repo root:
+Built-in `openai_compatible` (`openai` alias) and `aoc_signed` profiles supply request/response contracts.
+Model definitions live in the gitignored `common/config/models.yaml`; only
+secrets come from the process environment or the repo-root `.env`:
 
-| Variable | Purpose |
-|----------|---------|
-| `LLM_CHAT_MODEL` | Model name — **required** |
-| `LLM_CHAT_API_KEY` | API key — **required** |
-| `LLM_CHAT_URL` | Full chat-completions endpoint — **required** |
-| `LLM_CHAT_VERIFY_SSL` | `false` to skip TLS verification (self-signed gateways) |
-| `LLM_CHAT_ENABLE_THINKING` | Chain-of-thought flag |
+```yaml
+models:
+  chat:
+    provider: openai_compatible
+    model: your-model
+    url: https://provider.example/v1/chat/completions
+    api_key_env: LLM_CHAT_API_KEY
+```
 
-`CAPABILITY` is `chat`, `embed`, or `rerank`; `FIELD` is any scalar key of that capability.
-Precedence is **environment > `.env` > `llm_config.json`**. Structured fields (`auth`, `headers`,
-`body`, `response`) are request templates and stay in the JSON. In Docker only the `LLM_CHAT_*`
-variables are forwarded (see `docker-compose.yml`); other capabilities stay JSON-configured there.
+```dotenv
+LLM_CHAT_API_KEY=your-secret
+```
+
+The keys under `models:` are the enabled capabilities — `chat`, `embed` and
+`rerank` are the built-in ones, and any other name works once a registered
+profile supports it. `model` and `url` are required; `provider` defaults to
+`openai`. For AOC signing set `provider: aoc_signed` and reference
+`app_key_env` / `app_secret_env` under `auth:`, plus any service-specific
+fields. `timeout`, `verify_ssl` and `enable_thinking` are optional. A reference
+to an unset variable fails the load, and a literal secret in the file is
+rejected. `LLM_CONFIG_FILE` selects a different model file, while
+`docker-compose.yml` mounts one through `LLM_CONFIG_HOST_FILE`. Process
+environment variables take precedence over `.env`. Changes take effect after
+process restart.
+
+Protocol contracts are registered in `common/llm/config/model_sources.py`;
+adding a new model using an existing protocol needs only configuration, while
+a new protocol requires a profile and its tests. `A2AT_LLM_*` remains an
+independent SDK configuration.
+
+`api_key_env` is optional for keyless local endpoints. Run
+`python -m scripts.migrate_llm_config` if settings are still in `.env`, or
+`python -m scripts.migrate_legacy_llm_json` if they are still in the old JSON.
 
 This configures the orchestration backend's own LLM calls (intent parsing, PSOP retrieval, PDF
 summarization). It is independent of the A2A-T negotiation SDK's configuration below.
 
-```bash
-LLM_CHAT_MODEL=gpt-4o
-LLM_CHAT_API_KEY=<your-api-key>
-LLM_CHAT_URL=https://api.openai.com/v1/chat/completions
-```
-
-See [`.env.example`](.env.example) for DeepSeek, Qwen and self-hosted-gateway examples.
+See [`models.yaml.example`](common/config/models.yaml.example) and
+[`.env.example`](.env.example) for DeepSeek, Qwen and self-hosted-gateway examples.
 
 ## A2A-T SDK Integration
 

@@ -25,17 +25,14 @@ services:
     build: .
     container_name: openan-orchestration-center-sample-agents
     command: ["python3", "-m", "samples.start_agents_server"]
+    volumes:
+      - ${LLM_CONFIG_HOST_FILE:-./common/config/models.yaml}:/opt/orchestration-center/common/config/models.yaml:ro
+    env_file:
+      - .env
     environment:
       - SAMPLE_AGENTS_HOST=sample-agents
       - AGENT_REGISTRY_URL=${AGENT_REGISTRY_URL:-http://openan-registry-center:5000}
       - PERSISTENCE_MODE=file
-      # Negotiation-capable sample agents need a real chat model to do
-      # anything past startup; common/config/llm_config.json ships with a
-      # placeholder API key. Set these in the host shell or a .env next to
-      # this file to point at a real provider.
-      - LLM_CHAT_MODEL=${LLM_CHAT_MODEL:-}
-      - LLM_CHAT_API_KEY=${LLM_CHAT_API_KEY:-}
-      - LLM_CHAT_URL=${LLM_CHAT_URL:-}
     ports:
       - "8899-8904:8899-8904"
       - "26335-26336:26335-26336"

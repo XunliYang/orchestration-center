@@ -104,8 +104,7 @@ class TestModelConfig:
 # ── configuration guard ──
 
 class TestConfiguredGuard:
-    """llm_config.json ships provider-neutral placeholders; leaving one in place
-    must fail with a message naming the field and the variable that sets it."""
+    """Placeholder model names and URLs must fail before a provider call."""
 
     def _instance_with(self, **overrides):
         from common.llm.llm import get_llm_instance, reset_instances
@@ -117,20 +116,17 @@ class TestConfiguredGuard:
         finally:
             reset_instances()
 
-    @pytest.mark.parametrize("field,env_var", [
-        ("url", "LLM_CHAT_URL"),
-        ("model", "LLM_CHAT_MODEL"),
-        ("api_key", "LLM_CHAT_API_KEY"),
-    ])
-    def test_placeholder_is_rejected(self, field, env_var):
+    @pytest.mark.parametrize("field", ["url", "model"])
+    def test_placeholder_is_rejected(self, field):
+        # url and model come only from models.yaml now, so the message points at
+        # that file instead of naming an environment variable.
         with pytest.raises(ValueError) as exc:
             self._instance_with(**{field: "<YOUR_VALUE>"})
         assert field in str(exc.value)
-        assert env_var in str(exc.value)
+        assert "common/config/models.yaml" in str(exc.value)
 
-    def test_empty_value_is_rejected(self):
-        with pytest.raises(ValueError, match="api_key"):
-            self._instance_with(api_key="")
+    def test_keyless_local_model_is_accepted(self):
+        assert self._instance_with(api_key="") is not None
 
     def test_fully_configured_capability_is_accepted(self):
         assert self._instance_with() is not None

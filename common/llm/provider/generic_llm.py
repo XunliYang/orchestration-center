@@ -138,9 +138,7 @@ class GenericLLM:
 
     def _do_request(self, body: dict) -> dict:
         headers = self._build_headers()
-        logger.debug(f"GenericLLM request: url={self._url}")
-        logger.debug(f"Headers: {headers}")
-        logger.debug(f"Body: {json.dumps(body, ensure_ascii=False)[:500]}")
+        logger.debug("GenericLLM request")
         response = self._client.post(self._url, headers=headers, json=body)
         response.raise_for_status()
         return response.json()

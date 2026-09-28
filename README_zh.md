@@ -1,4 +1,4 @@
-﻿<!--
+<!--
 Copyright (c) 2026 Huawei Technologies Co., Ltd.
 All Rights Reserved.
 
@@ -381,39 +381,14 @@ SAN 必须与客户端 URL 的主机匹配，IP 必须使用 `--ip`，仅设置 
 | `etc/conf/server.conf` | 服务 IP、端口、TLS 证书、持久化模式、注册中心 URL, access password, client_verify_server |
 | `etc/conf/server.properties` | TLS 密码套件、流控参数、连接限制 |
 | `etc/conf/db_config.json` | PostgreSQL 连接配置——已加入 .gitignore；复制 `etc/conf/db_config.json.template` 作为起点（仅 `persistence_mode=postgresql` 时需要） |
-| `common/config/llm_config.json` | LLM/Embedding/Rerank 模型端点（可通过 `LLM_*` 覆盖，见下文） |
-| `.env` | 本地覆盖配置 — 已加入 gitignore。协商 SDK 也直接从这里读取 `A2AT_*` 变量（见下文） |
+| `.env` | 本地密钥 — 已加入 gitignore；模型定义见 `common/config/models.yaml`。协商 SDK 也直接从这里读取 `A2AT_*` 变量（见下文） |
 | `common/config/README_zh.md` | LLM 配置指南 |
 
 ## LLM 配置
 
-无硬编码厂商。`common/config/llm_config.json` 提供占位符，任何兼容 OpenAI 的服务均可使用。
-每个标量字段都可以不修改 JSON 直接覆盖，使用 `LLM_<能力>_<字段>` —— 在环境变量或仓库根目录的
-`.env` 中设置：
+模型定义放在本地（已加入 gitignore）的 `common/config/models.yaml`，密钥从进程环境变量或仓库根目录的 `.env` 获取，进程环境优先。`models:` 下的每个键是一种能力（`chat`、`embed`、`rerank`，或由已注册 Profile 支持的其它名称）；条目中用 `model`、`url` 描述端点，并用 `api_key_env` 填写**保存密钥的环境变量名**——文件中不写密钥。兼容 OpenAI 的接口使用默认的 `openai_compatible` profile（`openai` 为旧别名）；AOC 签名接口使用 `aoc_signed` profile，并在 `auth` 下填写 `app_key_env`、`app_secret_env`。完整说明见 [LLM 配置指南](common/config/README_zh.md)、[`models.yaml.example`](common/config/models.yaml.example) 和 [`.env.example`](.env.example)。
 
-| 变量 | 用途 |
-|------|------|
-| `LLM_CHAT_MODEL` | 模型名称 — **必填** |
-| `LLM_CHAT_API_KEY` | API 密钥 — **必填** |
-| `LLM_CHAT_URL` | 完整的 chat-completions 端点 — **必填** |
-| `LLM_CHAT_VERIFY_SSL` | 设为 `false` 跳过 TLS 校验（自签名网关） |
-| `LLM_CHAT_ENABLE_THINKING` | 思考模式开关 |
-
-`能力` 为 `chat`、`embed` 或 `rerank`；`字段` 为该能力下任意标量字段。优先级为
-**环境变量 > `.env` > `llm_config.json`**。结构化字段（`auth`、`headers`、`body`、`response`）
-是请求模板，仍保留在 JSON 中。容器内仅透传 `LLM_CHAT_*`（见 `docker-compose.yml`），其他能力
-仍通过 JSON 配置。
-
-该配置驱动编排后端自身的 LLM 调用（意图解析、PSOP 检索、PDF 摘要），与下文 A2A-T 协商 SDK 的
-配置相互独立。
-
-```bash
-LLM_CHAT_MODEL=gpt-4o
-LLM_CHAT_API_KEY=<your-api-key>
-LLM_CHAT_URL=https://api.openai.com/v1/chat/completions
-```
-
-DeepSeek、Qwen 及自建网关的示例参见 [`.env.example`](.env.example)。
+现有 `.env` 中的模型配置运行 `python -m scripts.migrate_llm_config` 迁移；仍在旧 JSON 中的配置运行 `python -m scripts.migrate_legacy_llm_json`。两种方式都不会输出密钥；遇到冲突会中止，旧 JSON 的自定义协议模板需先实现 Profile。
 
 ## A2A-T SDK 集成
 

@@ -85,7 +85,8 @@ class TestWarnIfChatLlmUnconfigured:
             _warn_if_chat_llm_unconfigured()
         assert mock_logger.warning.called
         message = mock_logger.warning.call_args[0][0]
-        assert "url" in message and "model" in message and "api_key" in message
+        assert "url" in message and "model" in message
+        assert "api_key" not in message
 
     def test_no_warning_when_fully_configured(self):
         config = MagicMock(url="https://api.openai.com/v1/chat/completions", model="gpt-4o", api_key="sk-real")

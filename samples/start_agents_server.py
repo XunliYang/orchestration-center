@@ -170,7 +170,7 @@ def _warn_if_chat_llm_unconfigured() -> None:
         from common.llm.config.llm_config import describe_missing_fields, get_model_config, missing_required_fields
 
         config = get_model_config("chat")
-        missing = missing_required_fields(config) if config else ["url", "model", "api_key"]
+        missing = missing_required_fields(config) if config else ["url", "model"]
         if missing:
             logger.warning(
                 f"Sample agents starting without a configured chat LLM: "

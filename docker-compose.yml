@@ -8,6 +8,9 @@ services:
       - ./data:/opt/orchestration-center/data
       - ./etc/ssl:/opt/orchestration-center/etc/ssl
       - ./log:/opt/orchestration-center/log
+      - ${LLM_CONFIG_HOST_FILE:-./common/config/models.yaml}:/opt/orchestration-center/common/config/models.yaml:ro
+    env_file:
+      - .env
     environment:
       - ORCH_IP=${ORCH_IP:-0.0.0.0}
       - ORCH_PORT=${ORCH_PORT:-5001}

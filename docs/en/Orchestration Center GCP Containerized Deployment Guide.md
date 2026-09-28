@@ -175,10 +175,22 @@ Or just re-run `.\deploy-all.ps1` — existing resources are skipped automatical
 PSOP generation and intent orchestration require an LLM — won't work without it:
 
 ```powershell
-gcloud run services update orchestration-center --region=asia-east1 --project="YOUR_PROJECT_ID" --update-env-vars="LLM_CHAT_MODEL=deepseek-chat,LLM_CHAT_API_KEY=sk-xxxxx,LLM_CHAT_URL=https://api.deepseek.com/v1/chat/completions,A2AT_LLM_PROVIDER=deepseek,A2AT_LLM_MODEL=deepseek-chat,A2AT_LLM_API_KEY=sk-xxxxx,A2AT_LLM_BASE_URL=https://api.deepseek.com"
+gcloud run services update orchestration-center --region=asia-east1 --project="YOUR_PROJECT_ID" --update-env-vars="LLM_CHAT_MODEL=deepseek-chat,LLM_CHAT_URL=https://api.deepseek.com/v1/chat/completions,A2AT_LLM_PROVIDER=deepseek,A2AT_LLM_MODEL=deepseek-chat,A2AT_LLM_BASE_URL=https://api.deepseek.com"
 ```
 
-Replace `sk-xxxxx` with your actual API key.
+Inject `LLM_CHAT_API_KEY` and `A2AT_LLM_API_KEY` through your deployment's secret mechanism. Do not put real keys into this command or shell history.
+
+This deployment path supplies model settings as environment variables, and `common/config/models.yaml` is
+deliberately not part of the image, so the container entrypoint turns the
+`LLM_CHAT_*` variables into that file at startup: `LLM_CHAT_MODEL` and
+`LLM_CHAT_URL` become the model definition, and `LLM_CHAT_API_KEY` is referenced
+by name rather than written to disk. This shortcut uses the `openai_compatible`
+protocol profile (the legacy `openai` alias is also accepted), regardless of
+model vendor. Other profiles, such as `aoc_signed`, require a complete YAML file.
+Only the `chat` capability is generated this way —
+provide a complete `models.yaml` at `/opt/orchestration-center/common/config/models.yaml` when
+`embed` or `rerank` is needed. `LLM_CONFIG_HOST_FILE` applies only to Docker Compose,
+not to this Cloud Run command. An existing `models.yaml` is never overwritten.
 
 ### LLM configuration examples
 

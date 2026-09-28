@@ -32,7 +32,7 @@ def _get_instance(capability: str) -> GenericLLM:
         if config is None:
             raise ValueError(
                 f"No model configured for capability '{capability}' "
-                f"in llm_config.json"
+                "(check common/config/models.yaml or LLM_CONFIG_FILE)"
             )
         missing = missing_required_fields(config)
         if missing:
@@ -60,12 +60,10 @@ def reset_instances() -> None:
     live for the process lifetime, so in production a configuration change takes
     effect on restart and nothing should be resetting them at runtime.
     """
-    from common.llm.config.env_overrides import reset_dotenv_cache
     from common.llm.config.llm_config import _ModelConfigHolder
 
     _instances.clear()
     _ModelConfigHolder.reset()
-    reset_dotenv_cache()
 
 if __name__ == "__main__":
     # Test Chat model
