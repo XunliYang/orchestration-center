@@ -1,4 +1,4 @@
-﻿# AGENTS.md
+# AGENTS.md
 
 ## Project overview
 
@@ -88,7 +88,7 @@ The `WorkflowStorage` singleton is accessed via `get_workflow_storage()` (uses `
 
 ### A2A-T SDK config
 
-Host-side A2A-T content generation reads its `A2AT_*` variables (`A2AT_LLM_PROVIDER`, `A2AT_LLM_MODEL`, `A2AT_LLM_API_KEY`, `A2AT_LLM_BASE_URL`, …) from the repo-root `.env`. The workflow engine does not initialize the retired negotiation state machine. `A2AT_*` is independent of `LLM_CHAT_*` below (no auto-derivation between the two).
+Host-side A2A-T content generation reads its `A2AT_*` variables (`A2AT_LLM_PROVIDER`, `A2AT_LLM_MODEL`, `A2AT_LLM_API_KEY`, `A2AT_LLM_BASE_URL`, …) from the repo-root `.env`. The workflow engine does not initialize the retired negotiation state machine. `A2AT_*` is independent of `LLM_CHAT_*` below (no auto-derivation between the two). `A2AT_LLM_PROVIDER` names an LLM client registered in the *current* process, not a model vendor — the endpoint is whatever `A2AT_LLM_BASE_URL` points at. The SDK registers `openai` in every process, while `orchestrate.runtime.exec_engine` registers `deepseek` in the backend only, so keep the variable at `openai` unless every process registers the name it uses; any other value fails in the sample agents with `Unknown llm provider`.
 
 The orchestration backend's own LLM calls (intent parsing, retrieval) read model definitions from `common/config/models.yaml` (path overridable through `LLM_CONFIG_FILE`); the keys under `models:` are the enabled capabilities. Only secrets come from the process environment or repo-root `.env`, which wins over the file: a definition names the variable through `api_key_env` or `auth.<field>_env`, and a literal secret in the file is rejected. `common/llm/config/model_sources.py` owns that resolution and the registered wire-protocol profiles (`openai_compatible`, with `openai` kept as an alias; `aoc_signed`); add a provider profile for a new protocol instead of hardcoding it in the loader. The legacy JSON model file is migration input only and is not a runtime source.
 

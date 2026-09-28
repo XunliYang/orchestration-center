@@ -44,6 +44,22 @@ def test_entrypoint_generates_chat_without_writing_secret(tmp_path):
 
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX container entrypoint")
+def test_entrypoint_keeps_existing_model_file(tmp_path):
+    config_dir = tmp_path / "common" / "config"
+    config_dir.mkdir(parents=True)
+    path = config_dir / "models.yaml"
+    existing = "models:\n  embed:\n    model: kept\n    url: https://example.invalid/embed\n"
+    path.write_text(existing, encoding="utf-8")
+    env = {
+        "APP_HOME": str(tmp_path), "PATH": os.environ["PATH"],
+        "LLM_CHAT_MODEL": "model", "LLM_CHAT_URL": "https://example.invalid/chat",
+    }
+    result = subprocess.run(["bash", str(SCRIPT), "true"], env=env, capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+    assert path.read_text(encoding="utf-8") == existing
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX container entrypoint")
 @pytest.mark.parametrize("provider", ["aoc_signed", "unknown"])
 def test_entrypoint_rejects_provider_requiring_full_yaml(tmp_path, provider):
     (tmp_path / "common" / "config").mkdir(parents=True)

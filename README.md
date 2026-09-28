@@ -545,11 +545,16 @@ fulfillment negotiation. Its configuration (`A2AT_LLM_PROVIDER`, `A2AT_LLM_MODEL
 from the repo-root `.env` — set it there:
 
 ```bash
-A2AT_LLM_PROVIDER=deepseek
+A2AT_LLM_PROVIDER=openai
 A2AT_LLM_MODEL=deepseek-chat
 A2AT_LLM_API_KEY=<your-api-key>
 A2AT_LLM_BASE_URL=https://api.deepseek.com
 ```
+
+`A2AT_LLM_PROVIDER` selects the SDK's LLM client, not the model vendor — the endpoint is whatever
+`A2AT_LLM_BASE_URL` points at. Keep it at `openai`: the SDK registers that name in every process,
+while other names (such as `deepseek`) are registered only inside the orchestration-center backend
+and make the sample agents fail with `Unknown llm provider`.
 
 This is independent of the `LLM_CHAT_*` configuration above — there is no auto-derivation between
 the two.

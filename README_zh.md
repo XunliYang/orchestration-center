@@ -397,11 +397,15 @@ SAN 必须与客户端 URL 的主机匹配，IP 必须使用 `--ip`，仅设置 
 `A2AT_LLM_PROVIDER`、`A2AT_LLM_MODEL`、`A2AT_LLM_API_KEY`、`A2AT_LLM_BASE_URL`：
 
 ```env
-A2AT_LLM_PROVIDER=deepseek
+A2AT_LLM_PROVIDER=openai
 A2AT_LLM_MODEL=deepseek-chat
 A2AT_LLM_API_KEY=<your-api-key>
 A2AT_LLM_BASE_URL=https://api.deepseek.com
 ```
+
+`A2AT_LLM_PROVIDER` 选择的是 SDK 的 LLM 客户端，不是模型厂商——实际端点由 `A2AT_LLM_BASE_URL`
+决定。请保持 `openai`：SDK 在每个进程都注册该名字，而其它名字（如 `deepseek`）只在编排中心后端
+进程内注册，示例 Agent 会因此报 `Unknown llm provider`。
 
 workflow-engine 不初始化已废弃的协商状态机。上述配置与上文的 `LLM_CHAT_*` 相互独立，两者之间没有自动派生关系。
 

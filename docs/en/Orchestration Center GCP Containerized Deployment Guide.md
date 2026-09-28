@@ -175,10 +175,12 @@ Or just re-run `.\deploy-all.ps1` — existing resources are skipped automatical
 PSOP generation and intent orchestration require an LLM — won't work without it:
 
 ```powershell
-gcloud run services update orchestration-center --region=asia-east1 --project="YOUR_PROJECT_ID" --update-env-vars="LLM_CHAT_MODEL=deepseek-chat,LLM_CHAT_URL=https://api.deepseek.com/v1/chat/completions,A2AT_LLM_PROVIDER=deepseek,A2AT_LLM_MODEL=deepseek-chat,A2AT_LLM_BASE_URL=https://api.deepseek.com"
+gcloud run services update orchestration-center --region=asia-east1 --project="YOUR_PROJECT_ID" --update-env-vars="LLM_CHAT_MODEL=deepseek-chat,LLM_CHAT_URL=https://api.deepseek.com/v1/chat/completions,A2AT_LLM_PROVIDER=openai,A2AT_LLM_MODEL=deepseek-chat,A2AT_LLM_BASE_URL=https://api.deepseek.com"
 ```
 
 Inject `LLM_CHAT_API_KEY` and `A2AT_LLM_API_KEY` through your deployment's secret mechanism. Do not put real keys into this command or shell history.
+
+`A2AT_LLM_PROVIDER` selects the A2A-T SDK's LLM client, not the model vendor (the endpoint is whatever `A2AT_LLM_BASE_URL` points at); keep it at `openai`, the one name the SDK registers in every process. Other names are registered only inside specific processes and make the sample agents fail with `Unknown llm provider`.
 
 This deployment path supplies model settings as environment variables, and `common/config/models.yaml` is
 deliberately not part of the image, so the container entrypoint turns the
