@@ -203,6 +203,54 @@ async def test_sandbox_runner_executes_dag_and_records_context():
     assert merge_trace.upstream_result_count == 1
     assert len(report.stub_interactions) == 1
     assert report.error is None
+    assert report.verification_scope == "structure_and_stub_execution"
+    assert report.route_policy == "always_allow_stub"
+
+
+@pytest.mark.asyncio
+async def test_sandbox_limits_retained_events_without_changing_verdict():
+    retained = []
+    report = await run_sandbox(
+        _psop(),
+        [_card()],
+        _SandboxControlPoint(),
+        max_events=1,
+        event_sink=retained.append,
+    )
+
+    assert report.verdict.value == "pass"
+    assert report.events_truncated is True
+    assert len(retained) == 1
+
+
+@pytest.mark.asyncio
+async def test_sandbox_limits_event_bytes():
+    retained = []
+    report = await run_sandbox(
+        _psop(),
+        [_card()],
+        _SandboxControlPoint(),
+        max_event_bytes=1,
+        event_sink=retained.append,
+    )
+
+    assert report.verdict.value == "pass"
+    assert report.events_truncated is True
+    assert retained == []
+
+
+@pytest.mark.asyncio
+async def test_sandbox_retains_failure_verdict_when_error_event_is_truncated():
+    report = await run_sandbox(
+        _psop(),
+        [_card()],
+        _SandboxControlPoint(),
+        scenario=StubScenario.ERROR,
+        max_events=1,
+    )
+
+    assert report.verdict.value == "fail"
+    assert report.events_truncated is True
 
 
 @pytest.mark.asyncio

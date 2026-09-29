@@ -163,6 +163,15 @@ export function SandboxReportView({ report, isDark }) {
                 </span>
             </div>
 
+            <p className="text-xs text-amber-500" role="note">
+                {t("sandbox.report.scopeNotice")}
+            </p>
+            {(report.events_truncated || report.report_truncated) && (
+                <p className="text-xs text-amber-500" role="status">
+                    {t("sandbox.report.eventsTruncated")}
+                </p>
+            )}
+
             {report.error && (
                 <p className="text-xs text-rose-500">{report.error}</p>
             )}

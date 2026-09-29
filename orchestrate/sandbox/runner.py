@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from collections.abc import Iterable
 from typing import Any
 from uuid import uuid4
@@ -144,8 +145,12 @@ async def run_sandbox(
     runtime_intent: str = "",
     lang: str = "zh",
     event_sink=None,
+    max_events: int = 1000,
+    max_event_bytes: int = 1_000_000,
 ) -> SandboxRunReport:
     """Run static validation and Stub execution through the real workflow runner."""
+    if max_events < 1 or max_event_bytes < 1:
+        raise ValueError("Sandbox event limits must be positive")
     scenario_value = _scenario(scenario)
     agent_cards = list(agent_cards)
     static_report = validate_sandbox_static(psop, agent_cards, lang)
@@ -184,6 +189,9 @@ async def run_sandbox(
         context_trace,
     )
     events: list[dict[str, Any]] = []
+    event_bytes = 0
+    events_truncated = False
+    saw_error = False
     error: str | None = None
     try:
         async for event in execute_psop(
@@ -194,7 +202,14 @@ async def run_sandbox(
             runtime_intent=runtime_intent,
             lang=lang,
         ):
+            if event.get("type") == "error":
+                saw_error = True
+            size = len(json.dumps(event, ensure_ascii=False, default=str).encode("utf-8"))
+            if len(events) >= max_events or event_bytes + size > max_event_bytes:
+                events_truncated = True
+                continue
             events.append(event)
+            event_bytes += size
             if event_sink is not None:
                 try:
                     event_sink(event)
@@ -202,11 +217,17 @@ async def run_sandbox(
                     logger.warning(f"[Sandbox] Event sink failed: {exc}")
     except Exception as exc:
         error = str(exc) or type(exc).__name__
-        events.append({"type": "error", "data": {"error": error}})
+        saw_error = True
+        event = {"type": "error", "data": {"error": error}}
+        size = len(json.dumps(event, ensure_ascii=False).encode("utf-8"))
+        if len(events) < max_events and event_bytes + size <= max_event_bytes:
+            events.append(event)
+        else:
+            events_truncated = True
     finally:
         await stub_runtime.close()
 
-    verdict = _verdict(events, static_report.verdict)
+    verdict = SandboxCheckStatus.FAIL if saw_error else _verdict(events, static_report.verdict)
     risks, suggestions = _risks_and_suggestions(events, static_report.checks, scenario_value, lang)
     if error:
         suggestions.append(translate(lang, "report.suggestion_runner_exception"))
@@ -228,4 +249,5 @@ async def run_sandbox(
         risks=risks,
         suggestions=suggestions,
         error=error,
+        events_truncated=events_truncated,
     )

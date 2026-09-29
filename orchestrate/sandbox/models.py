@@ -107,6 +107,8 @@ class SandboxRunReport(BaseModel):
     workflow_id: str
     workflow_name: str
     mode: str = "sandbox"
+    verification_scope: str = "structure_and_stub_execution"
+    route_policy: str = "always_allow_stub"
     scenario: StubScenario
     verdict: SandboxCheckStatus
     static_checks: list[SandboxCheck] = Field(default_factory=list)
@@ -116,6 +118,8 @@ class SandboxRunReport(BaseModel):
     risks: list[str] = Field(default_factory=list)
     suggestions: list[str] = Field(default_factory=list)
     error: str | None = None
+    events_truncated: bool = False
+    report_truncated: bool = False
 
 
 _VARIABLE_PATTERN = re.compile(r"\{\{\s*([a-z_][a-z0-9_]*)\s*\}\}")

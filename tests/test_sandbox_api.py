@@ -218,6 +218,25 @@ def test_sandbox_store_persists_reports():
         shutil.rmtree(base, ignore_errors=True)
 
 
+def test_sandbox_store_bounds_persisted_report(tmp_path):
+    store = SandboxStore(tmp_path, max_report_bytes=1500)
+    report = SandboxRunReport(
+        workflow_id="wf-1",
+        workflow_name="flow",
+        scenario=StubScenario.SUCCESS,
+        verdict=SandboxCheckStatus.PASS,
+        risks=["large-risk" * 1000],
+    )
+
+    store.save_report(report, [{"type": "start", "data": "large-event" * 1000}])
+    stored = store.load_report(report.verification_id)
+    assert (store.report_dir / f"{report.verification_id}.json").stat().st_size <= 1500
+    assert stored["report"]["verdict"] == "pass"
+    assert stored["report"]["report_truncated"] is True
+    assert stored["report"]["events_truncated"] is True
+    assert stored["events"] == []
+
+
 @pytest.mark.asyncio
 async def test_service_uses_polling_id_for_report(monkeypatch, tmp_path):
     captured = {}

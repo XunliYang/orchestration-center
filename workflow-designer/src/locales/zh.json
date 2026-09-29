@@ -256,6 +256,8 @@
       "agents.negotiation_t_extension": "Negotiation-T 能力"
     },
     "report": {
+      "scopeNotice": "仅验证结构与 Stub 连通性；路由统一模拟为允许，不代表真实业务分支决策。",
+      "eventsTruncated": "记录达到大小或数量上限，部分事件或报告详情未保留。",
       "checks": "静态检查",
       "executionPath": "执行路径",
       "contextTrace": "上下文链路",
