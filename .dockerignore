@@ -21,6 +21,7 @@ docs/
 !README.md
 .env
 .env.*
+common/config/models.yaml
 workflow-designer/node_modules/
 workflow-designer/dist/
 wheelhouse/

@@ -375,7 +375,8 @@ PDF上传 → 解析章节 → PSOP生成 → 预览 → 可进入编辑
 etc/conf/server.conf       (基础配置, key=value 行)
 etc/conf/server.properties (覆盖配置, 更高优先级, 持久化用户设置)
 etc/conf/db_config.json    (PostgreSQL 连接)
-common/config/llm_config.json   (LLM 提供商配置)
+common/config/models.yaml  (LLM 模型定义；已 gitignore，复制 models.yaml.example)
+.env                       (LLM 密钥；由 api_key_env / auth.*_env 按名引用)
 ```
 
 ### 7.2 关键配置项

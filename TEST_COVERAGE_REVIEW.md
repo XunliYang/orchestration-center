@@ -52,7 +52,7 @@
 | `host_agent/runtime.py` | 81.5% | `test_host_agent_runtime.py` | start/aclose/shutdown 未测 |
 | `database/utils/table_creation.py` | 90% | `test_table_creation.py` | |
 | `common/llm/config/llm_config.py` | 94.1% | 2 个测试文件 | |
-| `common/llm/config/env_overrides.py` | 94% | `test_llm_env_overrides.py` | |
+| `common/llm/config/model_sources.py` | 新增 | `test_llm_model_sources.py` | 模型来源解析与协议 Profile |
 | `common/util/json_utils.py` / `semaphore_utils.py` / `cipher_util.py` | 100% | 各自专用测试 | |
 
 ### 部分覆盖 (30-70%) — 13 个模块

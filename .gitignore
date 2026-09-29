@@ -16,6 +16,8 @@ workflow-designer/stats.html
 data/
 etc/conf/task_prompt_stubs.json
 .env
+common/config/llm_config.json
+common/config/models.yaml
 *.pem
 *.cer
 *.key

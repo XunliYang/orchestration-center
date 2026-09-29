@@ -8,14 +8,15 @@ export PATH="/opt/venv/bin:$PATH"
 
 # ─────────────────────────────────────────────────────────────────────
 # Cloud Run / Kubernetes environment variable → config file override
-# The application reads from config files, not env vars.
-# This bridge writes env var values into the config files so they
-# take effect at runtime.
+# The application reads model definitions and other settings from config
+# files. This bridge writes env var values into those files so they take
+# effect at runtime. Secrets are the exception: they stay in the environment
+# and are referenced from the generated models.yaml instead of being written.
 # ─────────────────────────────────────────────────────────────────────
 
 SERVER_CONF="etc/conf/server.conf"
 DB_CONF="etc/conf/db_config.json"
-LLM_CONF="common/config/llm_config.json"
+MODELS_CONF="common/config/models.yaml"
 A2AT_ENV=".env"
 
 # --- server.conf overrides (using # as sed delimiter to handle paths safely) ---
@@ -77,23 +78,35 @@ with open(path, 'w') as f:
     echo "Config override: db_config.json updated from environment variables"
 fi
 
-# --- llm_config.json overrides ---
-# Chat model (required for PSOP generation and execution)
-if [ -n "${LLM_CHAT_MODEL}" ] || [ -n "${LLM_CHAT_API_KEY}" ] || [ -n "${LLM_CHAT_URL}" ]; then
+# --- models.yaml generation (LLM model definitions) ---
+# models.yaml is local configuration and is not shipped in the image. A platform
+# that can only supply environment variables gets the chat entry built here; a
+# file that already exists (for example one bind-mounted by Docker Compose) is
+# left untouched. The key itself is never written: api_key_env only names the
+# variable that holds it.
+if [ -f "${MODELS_CONF}" ]; then
+    echo "Model config: using existing ${MODELS_CONF}"
+elif [ -n "${LLM_CHAT_MODEL}" ] && [ -n "${LLM_CHAT_URL}" ]; then
+    case "${LLM_CHAT_PROVIDER:-openai_compatible}" in
+        openai|openai_compatible) ;;
+        *) echo "LLM_CHAT_PROVIDER=${LLM_CHAT_PROVIDER} cannot be generated from the simplified environment settings; provide a complete models.yaml" >&2; exit 1 ;;
+    esac
     python3 -c "
-import json, os
-path = '${LLM_CONF}'
-with open(path, 'r') as f:
-    cfg = json.load(f)
-chat = cfg.get('chat', {})
-if os.environ.get('LLM_CHAT_MODEL'):    chat['model']    = os.environ['LLM_CHAT_MODEL']
-if os.environ.get('LLM_CHAT_API_KEY'):  chat['api_key']  = os.environ['LLM_CHAT_API_KEY']
-if os.environ.get('LLM_CHAT_URL'):      chat['url']      = os.environ['LLM_CHAT_URL']
-cfg['chat'] = chat
-with open(path, 'w') as f:
-    json.dump(cfg, f, indent=2)
+import os, yaml
+chat = {
+    'provider': 'openai_compatible',
+    'model': os.environ['LLM_CHAT_MODEL'],
+    'url': os.environ['LLM_CHAT_URL'],
+}
+if os.environ.get('LLM_CHAT_API_KEY'):
+    chat['api_key_env'] = 'LLM_CHAT_API_KEY'
+with open('${MODELS_CONF}', 'w') as f:
+    yaml.safe_dump({'models': {'chat': chat}}, f, sort_keys=False)
 "
-    echo "Config override: llm_config.json[chat] updated from environment variables"
+    echo "Config override: models.yaml[chat] generated from environment variables"
+elif [ -n "${LLM_CHAT_MODEL}" ] || [ -n "${LLM_CHAT_URL}" ] || [ -n "${LLM_CHAT_API_KEY}" ]; then
+    echo "Incomplete chat model configuration: set both LLM_CHAT_MODEL and LLM_CHAT_URL" >&2
+    exit 1
 fi
 
 # --- .env overrides (A2A-T SDK) ---

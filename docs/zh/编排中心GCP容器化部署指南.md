@@ -175,10 +175,21 @@ gcloud run services update orchestration-center --region=asia-east1 --project="Y
 编排中心的 PSOP 生成、意图编排等功能依赖大模型，不配置无法使用：
 
 ```powershell
-gcloud run services update orchestration-center --region=asia-east1 --project="YOUR_PROJECT_ID" --update-env-vars="LLM_CHAT_MODEL=deepseek-chat,LLM_CHAT_API_KEY=sk-xxxxx,LLM_CHAT_URL=https://api.deepseek.com/v1/chat/completions,A2AT_LLM_PROVIDER=deepseek,A2AT_LLM_MODEL=deepseek-chat,A2AT_LLM_API_KEY=sk-xxxxx,A2AT_LLM_BASE_URL=https://api.deepseek.com"
+gcloud run services update orchestration-center --region=asia-east1 --project="YOUR_PROJECT_ID" --update-env-vars="LLM_CHAT_MODEL=deepseek-chat,LLM_CHAT_URL=https://api.deepseek.com/v1/chat/completions,A2AT_LLM_PROVIDER=openai,A2AT_LLM_MODEL=deepseek-chat,A2AT_LLM_BASE_URL=https://api.deepseek.com"
 ```
 
-把 `sk-xxxxx` 替换为你的实际 API Key。
+通过部署平台的密钥机制注入 `LLM_CHAT_API_KEY` 与 `A2AT_LLM_API_KEY`；不要把真实密钥直接写入命令或 Shell 历史。
+
+`A2AT_LLM_PROVIDER` 选择的是 A2A-T SDK 的 LLM 客户端，不是模型厂商（实际端点由 `A2AT_LLM_BASE_URL` 决定）；请保持 `openai`，它是 SDK 在每个进程都注册的名字。其它名字只在特定进程内注册，示例 Agent 会因此报 `Unknown llm provider`。
+
+这条部署路径通过环境变量提供模型参数，而 `common/config/models.yaml` 刻意不打进镜像，因此容器
+entrypoint 会在启动时把相关 `LLM_CHAT_*` 变量转成该文件：`LLM_CHAT_MODEL` 与
+`LLM_CHAT_URL` 成为模型定义，`LLM_CHAT_API_KEY` 只按名字引用、不落盘。此简化方式使用
+`openai_compatible` 协议 profile（也接受旧别名 `openai`），不限模型厂商；
+`aoc_signed` 等其他 profile 需要提供完整 YAML。这种方式只生成 `chat` 能力；
+需要 `embed` 或 `rerank` 时，请在容器内
+`/opt/orchestration-center/common/config/models.yaml` 提供完整文件。`LLM_CONFIG_HOST_FILE`
+仅用于 Docker Compose，不适用于这条 Cloud Run 命令。已存在的 `models.yaml` 不会被覆盖。
 
 ### LLM 配置示例
 

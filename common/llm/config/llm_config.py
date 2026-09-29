@@ -18,8 +18,6 @@
 from dataclasses import dataclass, field
 from typing import Any, Dict, Optional
 
-from loguru import logger
-
 @dataclass
 class ModelConfig:
     description: str = ""
@@ -62,18 +60,10 @@ class _ModelConfigHolder:
 
     @classmethod
     def _load(cls) -> Dict[str, ModelConfig]:
-        try:
-            from common.llm.config.config_reader import read_config_as_json
-            raw_config = read_config_as_json("../../config/llm_config.json")
-        except Exception as e:
-            logger.error(f"Failed to load LLM config: {e}")
-            raw_config = {}
-        # Environment overrides are applied here, not at the call sites, so every
-        # caller of get_model_config() sees the same resolved values.
-        from common.llm.config.env_overrides import apply_env_overrides
+        from common.llm.config.model_sources import load_model_configs
         return {
-            key: ModelConfig.from_dict(key, apply_env_overrides(key, val))
-            for key, val in raw_config.items()
+            key: ModelConfig.from_dict(key, value)
+            for key, value in load_model_configs().items()
         }
 
     @classmethod
@@ -84,23 +74,17 @@ class _ModelConfigHolder:
 def get_model_config(capability: str) -> Optional[ModelConfig]:
     return _ModelConfigHolder.get().get(capability)
 
-# Fields that must be filled in before any call can succeed. llm_config.json ships with
-# <YOUR_...> placeholders so it stays provider-neutral; leaving one in place must fail
-# with a clear message rather than reaching the provider.
-REQUIRED_FIELDS = ("url", "model", "api_key")
+REQUIRED_FIELDS = ("url", "model")
 
 def is_placeholder(value: str) -> bool:
     value = (value or "").strip()
     return not value or (value.startswith("<") and value.endswith(">"))
 
 def missing_required_fields(config: ModelConfig) -> list:
-    return [f for f in REQUIRED_FIELDS if is_placeholder(getattr(config, f, ""))]
+    return [field for field in REQUIRED_FIELDS if is_placeholder(getattr(config, field, ""))]
 
 def describe_missing_fields(capability: str, missing: list) -> str:
-    from common.llm.config.env_overrides import env_var_name
-
-    env_vars = ", ".join(env_var_name(capability, f) for f in missing)
     return (
         f"LLM capability '{capability}' is not configured: {', '.join(missing)}. "
-        f"Set {env_vars} (environment or .env), or edit common/config/llm_config.json."
+        "Set model and url in common/config/models.yaml (or LLM_CONFIG_FILE)."
     )

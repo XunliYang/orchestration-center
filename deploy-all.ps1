@@ -365,8 +365,9 @@ if ($LLM_CHAT_URL) {
 
 # A2A-T SDK LLM config (derived from chat model config for consistency)
 if ($LLM_CHAT_API_KEY) {
-    $a2atProvider = "deepseek"
-    if ($LLM_CHAT_URL -match "openai") { $a2atProvider = "openai" }
+    # A2A-T SDK client name, not the model vendor: the SDK registers `openai`
+    # in every process, so it is the only value every component accepts.
+    $a2atProvider = "openai"
     # Derive base URL from chat URL (strip /chat/completions suffix)
     $a2atBaseUrl = $LLM_CHAT_URL
     if ($a2atBaseUrl -match "/chat/completions$") {
