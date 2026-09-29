@@ -32,7 +32,7 @@ def _get_instance(capability: str) -> GenericLLM:
         if config is None:
             raise ValueError(
                 f"No model configured for capability '{capability}' "
-                "(check common/config/models.yaml or LLM_CONFIG_FILE)"
+                "(check etc/config/models.yaml or LLM_CONFIG_FILE)"
             )
         missing = missing_required_fields(config)
         if missing:

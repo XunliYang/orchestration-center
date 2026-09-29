@@ -29,6 +29,7 @@ from common.llm.config.llm_config import get_model_config
 from common.llm.config.model_sources import (
     EnvironmentSettingsSource, build_profile, load_model_configs, register_profile,
 )
+from common.llm.config import model_sources as model_sources_mod
 from common.llm.llm import get_llm_instance, reset_instances
 from common.llm.provider.generic_llm import GenericLLM
 from scripts.migrate_llm_config import migrate
@@ -252,3 +253,76 @@ def test_legacy_json_rejects_custom_protocol_before_writing(tmp_path):
     with pytest.raises(ValueError, match="custom body template"):
         migrate_legacy(source, dotenv, models)
     assert not dotenv.exists() and not models.exists()
+
+
+class _StaticSource:
+    """Minimal SettingsSource isolated from the autouse test fixture."""
+
+    def __init__(self, values):
+        self._values = dict(values)
+
+    def get(self, name):
+        return self._values.get(name)
+
+class _StaticSource:
+    """Minimal SettingsSource isolated from the autouse test fixture."""
+
+    def __init__(self, values):
+        self._values = dict(values)
+
+    def get(self, name):
+        return self._values.get(name)
+
+
+def test_etc_config_models_yaml_takes_precedence_over_legacy(tmp_path, monkeypatch):
+    """The etc/config location wins; the legacy common/config file is only a fallback."""
+    etc_file = tmp_path / "etc" / "config" / "models.yaml"
+    legacy_file = tmp_path / "common" / "config" / "models.yaml"
+    etc_file.parent.mkdir(parents=True)
+    legacy_file.parent.mkdir(parents=True)
+    etc_payload = (
+        "models:\n"
+        "  chat:\n"
+        "    model: from-etc\n"
+        "    url: https://example.invalid/chat\n"
+        "    api_key_env: LLM_CHAT_API_KEY\n"
+    )
+    legacy_payload = (
+        "models:\n"
+        "  chat:\n"
+        "    model: from-legacy\n"
+        "    url: https://example.invalid/chat\n"
+        "    api_key_env: LLM_CHAT_API_KEY\n"
+    )
+    etc_file.write_text(etc_payload, encoding="utf-8")
+    legacy_file.write_text(legacy_payload, encoding="utf-8")
+    source = _StaticSource({"LLM_CHAT_API_KEY": "secret-value"})
+    monkeypatch.delenv("LLM_CONFIG_FILE", raising=False)
+    monkeypatch.setattr(model_sources_mod, "DEFAULT_MODEL_FILE", etc_file)
+    monkeypatch.setattr(model_sources_mod, "LEGACY_MODEL_FILE", legacy_file)
+
+    assert model_sources_mod.resolve_model_file(source) == etc_file
+    configs = model_sources_mod.load_model_configs(source)
+    assert configs["chat"]["model"] == "from-etc"
+
+
+def test_legacy_common_config_models_yaml_still_supported(tmp_path, monkeypatch):
+    """Pre-migration deployments with only common/config/models.yaml keep working."""
+    legacy_file = tmp_path / "common" / "config" / "models.yaml"
+    legacy_file.parent.mkdir(parents=True)
+    legacy_file.write_text(
+        "models:\n"
+        "  chat:\n"
+        "    model: from-legacy\n"
+        "    url: https://example.invalid/chat\n"
+        "    api_key_env: LLM_CHAT_API_KEY\n",
+        encoding="utf-8",
+    )
+    source = _StaticSource({"LLM_CHAT_API_KEY": "secret-value"})
+    monkeypatch.delenv("LLM_CONFIG_FILE", raising=False)
+    monkeypatch.setattr(model_sources_mod, "DEFAULT_MODEL_FILE", tmp_path / "etc" / "config" / "models.yaml")
+    monkeypatch.setattr(model_sources_mod, "LEGACY_MODEL_FILE", legacy_file)
+
+    assert model_sources_mod.resolve_model_file(source) == legacy_file
+    configs = model_sources_mod.load_model_configs(source)
+    assert configs["chat"]["model"] == "from-legacy"

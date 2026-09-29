@@ -182,13 +182,13 @@ gcloud run services update orchestration-center --region=asia-east1 --project="Y
 
 `A2AT_LLM_PROVIDER` 选择的是 A2A-T SDK 的 LLM 客户端，不是模型厂商（实际端点由 `A2AT_LLM_BASE_URL` 决定）；请保持 `openai`，它是 SDK 在每个进程都注册的名字。其它名字只在特定进程内注册，示例 Agent 会因此报 `Unknown llm provider`。
 
-这条部署路径通过环境变量提供模型参数，而 `common/config/models.yaml` 刻意不打进镜像，因此容器
+这条部署路径通过环境变量提供模型参数，而 `etc/config/models.yaml` 刻意不打进镜像，因此容器
 entrypoint 会在启动时把相关 `LLM_CHAT_*` 变量转成该文件：`LLM_CHAT_MODEL` 与
 `LLM_CHAT_URL` 成为模型定义，`LLM_CHAT_API_KEY` 只按名字引用、不落盘。此简化方式使用
 `openai_compatible` 协议 profile（也接受旧别名 `openai`），不限模型厂商；
 `aoc_signed` 等其他 profile 需要提供完整 YAML。这种方式只生成 `chat` 能力；
 需要 `embed` 或 `rerank` 时，请在容器内
-`/opt/orchestration-center/common/config/models.yaml` 提供完整文件。`LLM_CONFIG_HOST_FILE`
+`/opt/orchestration-center/etc/config/models.yaml` 提供完整文件。`LLM_CONFIG_HOST_FILE`
 仅用于 Docker Compose，不适用于这条 Cloud Run 命令。已存在的 `models.yaml` 不会被覆盖。
 
 ### LLM 配置示例

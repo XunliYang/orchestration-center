@@ -241,7 +241,7 @@ containers don't). It's dev-only and intentionally absent from
 > silently breaking calls from the other.
 
 Negotiation-capable sample agents need a real chat model to do anything past
-startup. Give them a `chat` entry in `common/config/models.yaml` (or point
+startup. Give them a `chat` entry in `etc/config/models.yaml` (or point
 `LLM_CONFIG_HOST_FILE` at a shared one) and put the secret it names — such as
 `LLM_CHAT_API_KEY` — in the `.env` next to the compose file. Without both, the
 containers start green but negotiation fails.
@@ -487,14 +487,14 @@ The external API (`/api/v1/*`) is protected by mTLS at the TLS layer when `enabl
 | `etc/conf/server.properties` | TLS ciphers, rate limiting, connection limits |
 | `etc/conf/db_config.json` | PostgreSQL connection settings — gitignored; copy `etc/conf/db_config.json.template` to get started (only needed for `persistence_mode=postgresql`) |
 | `.env` | Local model settings and A2A-T SDK settings — gitignored; production should inject secrets through its environment |
-| `common/config/README_en.md` | LLM configuration guide |
+| `etc/config/README_en.md` | LLM configuration guide |
 | `generate_selfsign_cert.py` | Self-signed certificate generator (RSA 3072) |
 | `workflow_engine.client.ssl_context` | Client-side SSL context factory for outbound HTTPS (provided by the workflow-engine SDK) |
 
 ## LLM configuration
 
 Built-in `openai_compatible` (`openai` alias) and `aoc_signed` profiles supply request/response contracts.
-Model definitions live in the gitignored `common/config/models.yaml`; only
+Model definitions live in the gitignored `etc/config/models.yaml`; only
 secrets come from the process environment or the repo-root `.env`:
 
 ```yaml
@@ -534,7 +534,7 @@ independent SDK configuration.
 This configures the orchestration backend's own LLM calls (intent parsing, PSOP retrieval, PDF
 summarization). It is independent of the A2A-T negotiation SDK's configuration below.
 
-See [`models.yaml.example`](common/config/models.yaml.example) and
+See [`models.yaml.example`](etc/config/models.yaml.example) and
 [`.env.example`](.env.example) for DeepSeek, Qwen and self-hosted-gateway examples.
 
 ## A2A-T SDK Integration
@@ -570,7 +570,7 @@ The workflow engine does not initialize the retired A2A-T negotiation state mach
 | [Developer Guide](docs/en/Orchestration%20Center%20Development%20Guide.md) | Custom handlers, LLM module, extension |
 | [GCP Deployment Guide](docs/en/Orchestration%20Center%20GCP%20Containerized%20Deployment%20Guide.md) | Docker + GCP Cloud Run deployment guide |
 | [Frontend README](workflow-designer/README.md) | Workflow Designer setup and tech stack |
-| [LLM Config](common/config/README_en.md) | LLM configuration reference |
+| [LLM Config](etc/config/README_en.md) | LLM configuration reference |
 
 > For Chinese documentation, see [中文 README](README_zh.md) or [docs/zh/](docs/zh/).
 

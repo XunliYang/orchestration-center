@@ -145,5 +145,5 @@ def migrate(dotenv_path: Path, models_path: Path) -> list[str]:
 
 if __name__ == "__main__":
     root = Path(__file__).resolve().parents[1]
-    names = migrate(root / ".env", root / "common" / "config" / "models.yaml")
+    names = migrate(root / ".env", root / "etc" / "config" / "models.yaml")
     print(f"Migrated {len(names)} model capabilities to local models.yaml (values hidden)")

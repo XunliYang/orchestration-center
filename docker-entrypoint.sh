@@ -16,7 +16,7 @@ export PATH="/opt/venv/bin:$PATH"
 
 SERVER_CONF="etc/conf/server.conf"
 DB_CONF="etc/conf/db_config.json"
-MODELS_CONF="common/config/models.yaml"
+MODELS_CONF="etc/config/models.yaml"
 A2AT_ENV=".env"
 
 # --- server.conf overrides (using # as sed delimiter to handle paths safely) ---

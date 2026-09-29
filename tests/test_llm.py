@@ -123,7 +123,7 @@ class TestConfiguredGuard:
         with pytest.raises(ValueError) as exc:
             self._instance_with(**{field: "<YOUR_VALUE>"})
         assert field in str(exc.value)
-        assert "common/config/models.yaml" in str(exc.value)
+        assert "etc/config/models.yaml" in str(exc.value)
 
     def test_keyless_local_model_is_accepted(self):
         assert self._instance_with(api_key="") is not None

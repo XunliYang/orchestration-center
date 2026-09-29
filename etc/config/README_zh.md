@@ -1,6 +1,6 @@
 # 模型配置
 
-模型定义放在 `common/config/models.yaml`，该文件被 Git 忽略——从
+模型定义放在 `etc/config/models.yaml`，该文件被 Git 忽略——从
 [`models.yaml.example`](models.yaml.example) 复制一份开始。密钥不写在该文件里：
 字段填写的是**保存该值的环境变量名**。本地示例见
 [`.env.example`](../../.env.example)。修改后需重启进程。
