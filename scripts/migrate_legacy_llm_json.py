@@ -128,6 +128,6 @@ if __name__ == "__main__":
     names = migrate(
         root / "common" / "config" / "llm_config.json",
         root / ".env",
-        root / "common" / "config" / "models.yaml",
+        root / "etc" / "config" / "models.yaml",
     )
     print(f"Migrated {len(names)} legacy model capabilities (values hidden)")

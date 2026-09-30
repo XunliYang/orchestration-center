@@ -32,7 +32,10 @@ import yaml
 from dotenv import dotenv_values
 
 ROOT = Path(__file__).resolve().parents[3]
-DEFAULT_MODEL_FILE = ROOT / "common" / "config" / "models.yaml"
+DEFAULT_MODEL_FILE = ROOT / "etc" / "config" / "models.yaml"
+# Pre-migration deployments may still keep the model file under common/config;
+# it is honored when etc/config/models.yaml does not exist.
+LEGACY_MODEL_FILE = ROOT / "common" / "config" / "models.yaml"
 ENV_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 CAPABILITY_NAME = re.compile(r"^[a-z][a-z0-9_]*$")
 MODEL_FIELDS = {
@@ -159,8 +162,12 @@ def _auth_values(raw: Any, source: SettingsSource, location: str) -> dict[str, s
 def resolve_model_file(source: SettingsSource | None = None) -> Path:
     source = source or EnvironmentSettingsSource()
     selected = source.get("LLM_CONFIG_FILE")
-    path = Path(selected) if selected else DEFAULT_MODEL_FILE
-    return path if path.is_absolute() else ROOT / path
+    if selected:
+        path = Path(selected)
+        return path if path.is_absolute() else ROOT / path
+    if DEFAULT_MODEL_FILE.is_file():
+        return DEFAULT_MODEL_FILE
+    return LEGACY_MODEL_FILE
 
 
 def load_model_configs(

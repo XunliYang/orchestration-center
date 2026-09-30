@@ -512,8 +512,8 @@ When executing a workflow, the system pushes execution progress in real time via
 
 **Solutions**:
 
-1. Copy `common/config/models.yaml.example` to `common/config/models.yaml` and add the `chat` and `embed` entries you need under `models:` (both `model` and `url` are required)
+1. Copy `etc/config/models.yaml.example` to `etc/config/models.yaml` and add the `chat` and `embed` entries you need under `models:` (both `model` and `url` are required)
 2. Set the variable each entry names through `api_key_env` in the repository-root `.env` (never write secrets into the model file)
 3. Restart the Orchestration Center so the settings take effect; if it still fails, look for `No model configured for capability 'chat'` in the backend log
 
-See [Development Guide 4.2 LLM Module Configuration Guide](Orchestration%20Center%20Development%20Guide.md) and [`models.yaml.example`](../../common/config/models.yaml.example) for the full field reference.
+See [Development Guide 4.2 LLM Module Configuration Guide](Orchestration%20Center%20Development%20Guide.md) and [`models.yaml.example`](../../etc/config/models.yaml.example) for the full field reference.

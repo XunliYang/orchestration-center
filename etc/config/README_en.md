@@ -1,6 +1,6 @@
 # Model configuration
 
-Model definitions live in `common/config/models.yaml`, a local file that Git
+Model definitions live in `etc/config/models.yaml`, a local file that Git
 ignores — copy [`models.yaml.example`](models.yaml.example) to start. Secrets
 never live there: a field names the environment variable that holds the value.
 See [`.env.example`](../../.env.example) for local setup. Restart the process

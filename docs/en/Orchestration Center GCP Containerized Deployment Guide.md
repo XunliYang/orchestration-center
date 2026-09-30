@@ -182,7 +182,7 @@ Inject `LLM_CHAT_API_KEY` and `A2AT_LLM_API_KEY` through your deployment's secre
 
 `A2AT_LLM_PROVIDER` selects the A2A-T SDK's LLM client, not the model vendor (the endpoint is whatever `A2AT_LLM_BASE_URL` points at); keep it at `openai`, the one name the SDK registers in every process. Other names are registered only inside specific processes and make the sample agents fail with `Unknown llm provider`.
 
-This deployment path supplies model settings as environment variables, and `common/config/models.yaml` is
+This deployment path supplies model settings as environment variables, and `etc/config/models.yaml` is
 deliberately not part of the image, so the container entrypoint turns the
 `LLM_CHAT_*` variables into that file at startup: `LLM_CHAT_MODEL` and
 `LLM_CHAT_URL` become the model definition, and `LLM_CHAT_API_KEY` is referenced
@@ -190,7 +190,7 @@ by name rather than written to disk. This shortcut uses the `openai_compatible`
 protocol profile (the legacy `openai` alias is also accepted), regardless of
 model vendor. Other profiles, such as `aoc_signed`, require a complete YAML file.
 Only the `chat` capability is generated this way —
-provide a complete `models.yaml` at `/opt/orchestration-center/common/config/models.yaml` when
+provide a complete `models.yaml` at `/opt/orchestration-center/etc/config/models.yaml` when
 `embed` or `rerank` is needed. `LLM_CONFIG_HOST_FILE` applies only to Docker Compose,
 not to this Cloud Run command. An existing `models.yaml` is never overwritten.
 

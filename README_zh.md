@@ -381,12 +381,12 @@ SAN 必须与客户端 URL 的主机匹配，IP 必须使用 `--ip`，仅设置 
 | `etc/conf/server.conf` | 服务 IP、端口、TLS 证书、持久化模式、注册中心 URL, access password, client_verify_server |
 | `etc/conf/server.properties` | TLS 密码套件、流控参数、连接限制 |
 | `etc/conf/db_config.json` | PostgreSQL 连接配置——已加入 .gitignore；复制 `etc/conf/db_config.json.template` 作为起点（仅 `persistence_mode=postgresql` 时需要） |
-| `.env` | 本地密钥 — 已加入 gitignore；模型定义见 `common/config/models.yaml`。协商 SDK 也直接从这里读取 `A2AT_*` 变量（见下文） |
-| `common/config/README_zh.md` | LLM 配置指南 |
+| `.env` | 本地密钥 — 已加入 gitignore；模型定义见 `etc/config/models.yaml`。协商 SDK 也直接从这里读取 `A2AT_*` 变量（见下文） |
+| `etc/config/README_zh.md` | LLM 配置指南 |
 
 ## LLM 配置
 
-模型定义放在本地（已加入 gitignore）的 `common/config/models.yaml`，密钥从进程环境变量或仓库根目录的 `.env` 获取，进程环境优先。`models:` 下的每个键是一种能力（`chat`、`embed`、`rerank`，或由已注册 Profile 支持的其它名称）；条目中用 `model`、`url` 描述端点，并用 `api_key_env` 填写**保存密钥的环境变量名**——文件中不写密钥。兼容 OpenAI 的接口使用默认的 `openai_compatible` profile（`openai` 为旧别名）；AOC 签名接口使用 `aoc_signed` profile，并在 `auth` 下填写 `app_key_env`、`app_secret_env`。完整说明见 [LLM 配置指南](common/config/README_zh.md)、[`models.yaml.example`](common/config/models.yaml.example) 和 [`.env.example`](.env.example)。
+模型定义放在本地（已加入 gitignore）的 `etc/config/models.yaml`，密钥从进程环境变量或仓库根目录的 `.env` 获取，进程环境优先。`models:` 下的每个键是一种能力（`chat`、`embed`、`rerank`，或由已注册 Profile 支持的其它名称）；条目中用 `model`、`url` 描述端点，并用 `api_key_env` 填写**保存密钥的环境变量名**——文件中不写密钥。兼容 OpenAI 的接口使用默认的 `openai_compatible` profile（`openai` 为旧别名）；AOC 签名接口使用 `aoc_signed` profile，并在 `auth` 下填写 `app_key_env`、`app_secret_env`。完整说明见 [LLM 配置指南](etc/config/README_zh.md)、[`models.yaml.example`](etc/config/models.yaml.example) 和 [`.env.example`](.env.example)。
 
 现有 `.env` 中的模型配置运行 `python -m scripts.migrate_llm_config` 迁移；仍在旧 JSON 中的配置运行 `python -m scripts.migrate_legacy_llm_json`。两种方式都不会输出密钥；遇到冲突会中止，旧 JSON 的自定义协议模板需先实现 Profile。
 
@@ -419,7 +419,7 @@ workflow-engine 不初始化已废弃的协商状态机。上述配置与上文�
 | [GCP 部署指南](docs/zh/编排中心GCP容器化部署指南.md) | Docker + GCP Cloud Run 部署指南 |
 | [设计文档](docs/DESIGN.md) | 系统架构与设计 |
 | [前端 README](workflow-designer/README.md) | 工作流设计器技术栈与开发 |
-| [LLM 配置](common/config/README_zh.md) | LLM 配置文件说明 |
+| [LLM 配置](etc/config/README_zh.md) | LLM 配置文件说明 |
 
 > 英文文档请参见 [docs/en/](docs/en/)。
 

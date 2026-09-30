@@ -29,7 +29,7 @@ SCRIPT = Path(__file__).resolve().parents[1] / "docker-entrypoint.sh"
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX container entrypoint")
 def test_entrypoint_generates_chat_without_writing_secret(tmp_path):
-    (tmp_path / "common" / "config").mkdir(parents=True)
+    (tmp_path / "etc" / "config").mkdir(parents=True)
     env = {
         "APP_HOME": str(tmp_path), "PATH": os.environ["PATH"],
         "LLM_CHAT_MODEL": "model", "LLM_CHAT_URL": "https://example.invalid/chat",
@@ -37,7 +37,7 @@ def test_entrypoint_generates_chat_without_writing_secret(tmp_path):
     }
     result = subprocess.run(["bash", str(SCRIPT), "true"], env=env, capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
-    path = tmp_path / "common" / "config" / "models.yaml"
+    path = tmp_path / "etc" / "config" / "models.yaml"
     assert yaml.safe_load(path.read_text(encoding="utf-8"))["models"]["chat"]["api_key_env"] == "LLM_CHAT_API_KEY"
     assert yaml.safe_load(path.read_text(encoding="utf-8"))["models"]["chat"]["provider"] == "openai_compatible"
     assert "secret-value" not in path.read_text(encoding="utf-8")
@@ -45,7 +45,7 @@ def test_entrypoint_generates_chat_without_writing_secret(tmp_path):
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX container entrypoint")
 def test_entrypoint_keeps_existing_model_file(tmp_path):
-    config_dir = tmp_path / "common" / "config"
+    config_dir = tmp_path / "etc" / "config"
     config_dir.mkdir(parents=True)
     path = config_dir / "models.yaml"
     existing = "models:\n  embed:\n    model: kept\n    url: https://example.invalid/embed\n"
@@ -71,7 +71,7 @@ def test_entrypoint_rejects_provider_requiring_full_yaml(tmp_path, provider):
     result = subprocess.run(["bash", str(SCRIPT), "true"], env=env, capture_output=True, text=True)
     assert result.returncode != 0
     assert "provide a complete models.yaml" in result.stderr
-    assert not (tmp_path / "common" / "config" / "models.yaml").exists()
+    assert not (tmp_path / "etc" / "config" / "models.yaml").exists()
 
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX container entrypoint")

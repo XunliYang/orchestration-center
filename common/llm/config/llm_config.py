@@ -86,5 +86,5 @@ def missing_required_fields(config: ModelConfig) -> list:
 def describe_missing_fields(capability: str, missing: list) -> str:
     return (
         f"LLM capability '{capability}' is not configured: {', '.join(missing)}. "
-        "Set model and url in common/config/models.yaml (or LLM_CONFIG_FILE)."
+        "Set model and url in etc/config/models.yaml (or LLM_CONFIG_FILE)."
     )

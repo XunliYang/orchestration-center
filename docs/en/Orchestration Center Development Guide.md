@@ -266,7 +266,7 @@ print("Verification passed")
 
 ### 4.2 LLM Module Configuration Guide
 
-The Chat, Embedding, and Reranker clients read model definitions from `common/config/models.yaml` and secrets from the process environment or the repository-root `.env` file. Process environment values take precedence; empty values do not mask `.env`. See [LLM configuration](../../common/config/README_en.md) and [`.env.example`](../../.env.example).
+The Chat, Embedding, and Reranker clients read model definitions from `etc/config/models.yaml` and secrets from the process environment or the repository-root `.env` file. Process environment values take precedence; empty values do not mask `.env`. See [LLM configuration](../../etc/config/README_en.md) and [`.env.example`](../../.env.example).
 
 Each key under `models:` is a capability (`chat`, `embed`, `rerank`, or any name a registered profile supports) and must set `model` and `url`. `provider` defaults to `openai_compatible` (the legacy alias `openai` is also accepted); `aoc_signed` supports signed AOC requests through `auth.app_key_env` and `auth.app_secret_env`. `description`, `timeout`, `verify_ssl`, and `enable_thinking` are optional, and `api_key_env` names the variable that holds the key. The file is gitignored and holds no secrets, since every secret field names an environment variable; `LLM_CONFIG_FILE` selects a different path. A new wire format is implemented as a registered provider profile in `common/llm/config/model_sources.py`, without changing the configuration loader.
 
