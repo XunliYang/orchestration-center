@@ -722,6 +722,11 @@ async def generate_from_preflow(
         workflow.source = "solution_package"
         SharedHandlers.save_psop().handle(workflow)
         logger.info(f"PSOP generated: id={workflow.id}, steps={len(workflow.steps)}")
+        # 回链:方案包 → 本次生成的工作流,方案包列表页据此展示 Workflow 入口
+        try:
+            solution_package_manager.link_workflow(preflow_name, workflow.id)
+        except Exception as link_error:
+            logger.warning(f"Failed to link workflow to solution package '{preflow_name}': {link_error}")
         audit_logger.audit({
             'object_name': OperationObject.PSOP,
             'operation_name': OperationName.SAVE_PSOP,
