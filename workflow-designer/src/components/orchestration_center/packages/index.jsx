@@ -1,44 +1,54 @@
-import React, { useState, useRef } from 'react';
-import { ArrowLeft, Upload, FileText, Link2, Clock, ExternalLink, Loader2 } from 'lucide-react';
+// Copyright (c) 2026 Huawei Technologies Co., Ltd.
+// All Rights Reserved.
+//
+// SPDX-License-Identifier: Apache-2.0
+//
+//    Licensed under the Apache License, Version 2.0 (the "License"); you may
+//    not use this file except in compliance with the License. You may obtain
+//    a copy of the License at
+//
+//         http://www.apache.org/licenses/LICENSE-2.0
+//
+//    Unless required by applicable law or agreed to in writing, software
+//    distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+//    WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+//    License for the specific language governing permissions and limitations
+//    under the License.
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { ArrowLeft, Upload, FileText, Link2, Clock, Loader2, RefreshCw, Trash2 } from 'lucide-react';
+import { listSolutionPackages, deleteSolutionPackage } from '../../../service/api';
 
-const MOCK_PACKAGES = [
-    {
-        id: 'pkg-001',
-        filename: 'RAN_Energy_Saving_Solution_Package.pdf',
-        importedAt: '2026-06-10T14:30:00Z',
-        pdfUrl: '#',
-        workflowId: 'wf-energy-saving-01',
-        workflowName: 'RAN Energy Saving Workflow',
-    },
-    {
-        id: 'pkg-002',
-        filename: 'SPN_Fault_Handling_Solution_Package.pdf',
-        importedAt: '2026-06-09T09:15:00Z',
-        pdfUrl: '#',
-        workflowId: 'wf-spn-fault-01',
-        workflowName: 'SPN Fault Handling Workflow',
-    },
-    {
-        id: 'pkg-003',
-        filename: 'Home_Broadband_Complaint_Solution_Package.pdf',
-        importedAt: '2026-06-08T16:45:00Z',
-        pdfUrl: '#',
-        workflowId: 'wf-broadband-01',
-        workflowName: 'Home Broadband Complaint Workflow',
-    },
-];
-
-const formatDate = (dateStr) => {
-    const d = new Date(dateStr);
-    return d.toLocaleDateString('zh-CN', {
-        year: 'numeric', month: '2-digit', day: '2-digit',
-        hour: '2-digit', minute: '2-digit'
-    });
-};
+const stem = (filename) => filename.replace(/\.pdf$/i, '');
 
 const SolutionPackages = ({ onBack, onImportPdf, onViewWorkflow, loading, loadingStatus, progress, t }) => {
     const fileInput = useRef(null);
     const [dragOver, setDragOver] = useState(false);
+    const [packages, setPackages] = useState([]);
+    const [listLoading, setListLoading] = useState(true);
+
+    const refresh = useCallback(async () => {
+        setListLoading(true);
+        try {
+            const data = await listSolutionPackages();
+            setPackages(Array.isArray(data) ? data : []);
+        } catch (e) {
+            setPackages([]);
+        } finally {
+            setListLoading(false);
+        }
+    }, []);
+
+    useEffect(() => { refresh(); }, [refresh]);
+
+    const handleDelete = async (pkg) => {
+        if (!window.confirm(`删除方案包 ${pkg.pdf_filename} ？关联的工作流不受影响。`)) return;
+        try {
+            await deleteSolutionPackage(pkg.pdf_filename);
+            await refresh();
+        } catch (e) {
+            console.error('Delete failed:', e.message || e);
+        }
+    };
 
     const handleDrop = (e) => {
         e.preventDefault();
@@ -55,6 +65,14 @@ const SolutionPackages = ({ onBack, onImportPdf, onViewWorkflow, loading, loadin
             onImportPdf(file);
         }
         e.target.value = '';
+    };
+
+    const formatDate = (dateStr) => {
+        const d = new Date(dateStr);
+        return isNaN(d.getTime()) ? dateStr : d.toLocaleDateString('zh-CN', {
+            year: 'numeric', month: '2-digit', day: '2-digit',
+            hour: '2-digit', minute: '2-digit'
+        });
     };
 
     return (
@@ -82,6 +100,13 @@ const SolutionPackages = ({ onBack, onImportPdf, onViewWorkflow, loading, loadin
                         ${loading ? 'pointer-events-none opacity-60' : ''}
                     `}
                 >
+                    <input
+                        type="file"
+                        ref={fileInput}
+                        className="hidden"
+                        accept=".pdf"
+                        onChange={handleFileSelect}
+                    />
                     {loading ? (
                         <>
                             <Loader2 size={36} className="animate-spin text-amber-500" />
@@ -112,13 +137,6 @@ const SolutionPackages = ({ onBack, onImportPdf, onViewWorkflow, loading, loadin
                             </div>
                         </>
                     )}
-                    <input
-                        type="file"
-                        ref={fileInput}
-                        className="hidden"
-                        accept=".pdf"
-                        onChange={handleFileSelect}
-                    />
                 </div>
             </div>
 
@@ -128,71 +146,92 @@ const SolutionPackages = ({ onBack, onImportPdf, onViewWorkflow, loading, loadin
                         {t('orchestration.packages_list_title')}
                     </h3>
                     <span className="px-2 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-[10px] font-black text-zinc-500 dark:text-zinc-400">
-                        {MOCK_PACKAGES.length}
+                        {packages.length}
                     </span>
+                    <button
+                        onClick={refresh}
+                        className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                        title="refresh"
+                    >
+                        <RefreshCw size={13} />
+                    </button>
                 </div>
 
-                <div className="space-y-3">
-                    {MOCK_PACKAGES.map(pkg => (
-                        <div
-                            key={pkg.id}
-                            className="group p-5 rounded-2xl border border-zinc-100 dark:border-zinc-800 bg-white dark:bg-zinc-900/50 hover:border-amber-200 dark:hover:border-amber-700 hover:shadow-lg transition-all duration-300"
-                        >
-                            <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-4 min-w-0 flex-1">
-                                    <div className="p-2.5 rounded-xl bg-red-50 dark:bg-red-900/20 text-red-500 shrink-0">
-                                        <FileText size={20} />
-                                    </div>
-                                    <div className="min-w-0 flex-1">
-                                        <h4 className="text-sm font-black text-zinc-800 dark:text-zinc-200 truncate">
-                                            {pkg.filename}
-                                        </h4>
-                                        <div className="flex items-center gap-2 mt-1">
-                                            <Clock size={11} className="text-zinc-400" />
-                                            <span className="text-[11px] text-zinc-400 dark:text-zinc-500">
-                                                {formatDate(pkg.importedAt)}
-                                            </span>
+                {listLoading ? (
+                    <div className="flex items-center justify-center py-16 text-zinc-400 gap-3">
+                        <Loader2 size={20} className="animate-spin" />
+                    </div>
+                ) : packages.length === 0 ? (
+                    <div className="py-16 text-center text-sm text-zinc-400">
+                        暂无已导入的解决方案包——拖入上方区域即可导入解析。
+                    </div>
+                ) : (
+                    <div className="space-y-3">
+                        {packages.map(pkg => {
+                            const workflowReady = Boolean(pkg.workflow_id);
+                            return (
+                                <div
+                                    key={pkg.pdf_filename}
+                                    className="group p-5 rounded-2xl border border-zinc-100 dark:border-zinc-800 bg-white dark:bg-zinc-900/50 hover:border-amber-200 dark:hover:border-amber-700 hover:shadow-lg transition-all duration-300"
+                                >
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-4 min-w-0 flex-1">
+                                            <div className="p-2.5 rounded-xl bg-red-50 dark:bg-red-900/20 text-red-500 shrink-0">
+                                                <FileText size={20} />
+                                            </div>
+                                            <div className="min-w-0 flex-1">
+                                                <h4 className="text-sm font-black text-zinc-800 dark:text-zinc-200 truncate">
+                                                    {pkg.pdf_filename}
+                                                </h4>
+                                                <div className="flex items-center gap-2 mt-1">
+                                                    <Clock size={11} className="text-zinc-400" />
+                                                    <span className="text-[11px] text-zinc-400 dark:text-zinc-500">
+                                                        {formatDate(pkg.created_at)}
+                                                    </span>
+                                                    <span className="text-[11px] text-zinc-400 dark:text-zinc-500">
+                                                        · {pkg.chapter_count ?? Object.keys(pkg.chapters || {}).length} 章节
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div className="flex items-center gap-3 shrink-0 ml-4">
+                                            {workflowReady ? (
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        onViewWorkflow(pkg.workflow_id);
+                                                    }}
+                                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-black uppercase tracking-wider text-white bg-blue-500 hover:bg-blue-600 shadow-sm shadow-blue-500/20 transition-all"
+                                                >
+                                                    <Link2 size={13} />
+                                                    Workflow
+                                                </button>
+                                            ) : (
+                                                <span className="px-3 py-1.5 rounded-lg text-[11px] font-bold text-zinc-400 dark:text-zinc-500 bg-zinc-50 dark:bg-zinc-800">
+                                                    Workflow 未生成
+                                                </span>
+                                            )}
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    handleDelete(pkg);
+                                                }}
+                                                className="p-2 rounded-lg text-zinc-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 transition-colors"
+                                                title={t('skills.delete_package')}
+                                            >
+                                                <Trash2 size={15} />
+                                            </button>
                                         </div>
                                     </div>
                                 </div>
-
-                                <div className="flex items-center gap-3 shrink-0 ml-4">
-                                    <a
-                                        href={pkg.pdfUrl}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        onClick={(e) => e.stopPropagation()}
-                                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-black uppercase tracking-wider text-zinc-500 dark:text-zinc-400 bg-zinc-50 dark:bg-zinc-800 hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-900/20 dark:hover:text-red-400 transition-all"
-                                    >
-                                        <FileText size={13} />
-                                        PDF
-                                        <ExternalLink size={11} />
-                                    </a>
-                                    <button
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            onViewWorkflow(pkg.workflowId);
-                                        }}
-                                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-black uppercase tracking-wider text-white bg-blue-500 hover:bg-blue-600 shadow-sm shadow-blue-500/20 transition-all"
-                                    >
-                                        <Link2 size={13} />
-                                        Workflow
-                                        <ChevronRightIcon size={11} />
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    ))}
-                </div>
+                            );
+                        })}
+                    </div>
+                )}
             </div>
         </div>
     );
 };
-
-const ChevronRightIcon = ({ size, className }) => (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
-        <polyline points="9 18 15 12 9 6" />
-    </svg>
-);
 
 export default SolutionPackages;

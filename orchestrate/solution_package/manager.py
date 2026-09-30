@@ -17,6 +17,7 @@
 
 import json
 import os
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional, Any, Union
 from loguru import logger
@@ -77,7 +78,8 @@ class SolutionPackageManager:
                 "pdf_filename": pdf_filename,
                 "chapters": chapters_dict,
                 "chapter_count": len(chapters_dict),
-                "chapter_titles": list(chapters_dict.keys())
+                "chapter_titles": list(chapters_dict.keys()),
+                "created_at": datetime.now(timezone.utc).isoformat()
             }
 
             # Write JSON file
@@ -147,6 +149,32 @@ class SolutionPackageManager:
         except Exception as e:
             logger.error(f"Failed to retrieve all solution packages: {e}")
             return []
+
+    def link_workflow(self, pdf_filename: str, workflow_id: str) -> bool:
+        """
+        Record the workflow generated from this solution package.
+
+        Args:
+            pdf_filename: PDF filename the package was stored under
+            workflow_id: Workflow id produced by generate-from-preflow
+
+        Returns:
+            bool: Whether the link was recorded
+        """
+        try:
+            data = self.retrieve_by_filename(pdf_filename)
+            if data is None:
+                logger.warning(f"No solution package found for '{pdf_filename}' to link workflow '{workflow_id}'")
+                return False
+            data["workflow_id"] = workflow_id
+            storage_path = self._get_storage_path(pdf_filename)
+            with open(storage_path, 'w', encoding='utf-8') as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+            logger.info(f"Linked workflow '{workflow_id}' to solution package '{pdf_filename}'")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to link workflow to '{pdf_filename}': {e}")
+            return False
 
     def get_all_filenames(self) -> List[str]:
         """
