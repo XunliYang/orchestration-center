@@ -91,6 +91,7 @@ elif [ -n "${LLM_CHAT_MODEL}" ] && [ -n "${LLM_CHAT_URL}" ]; then
         openai|openai_compatible) ;;
         *) echo "LLM_CHAT_PROVIDER=${LLM_CHAT_PROVIDER} cannot be generated from the simplified environment settings; provide a complete models.yaml" >&2; exit 1 ;;
     esac
+    mkdir -p "$(dirname "${MODELS_CONF}")"
     python3 -c "
 import os, yaml
 chat = {
