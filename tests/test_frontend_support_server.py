@@ -19,6 +19,7 @@
 import pytest
 from unittest.mock import patch, MagicMock, AsyncMock
 from io import BytesIO
+import json
 from fastapi.testclient import TestClient
 
 import httpx
@@ -131,9 +132,16 @@ class TestParsePdfEndpoint:
         assert response.status_code == 400
         assert 'not a valid PDF' in response.json()['message']
 
-    def test_parse_pdf_success(self, client, mock_parser):
-        """Test successful PDF parsing"""
-        mock_parser.parse_pdf_chapter.return_value = "# Test Markdown"
+    def test_parse_pdf_success(self, client, mock_parser, tmp_path, monkeypatch):
+        """Test successful PDF parsing: all chapters stored, chapter 5 -> PreFlow"""
+        monkeypatch.setattr(
+            "orchestrate.server.frontend_support_server.solution_package_manager.storage_dir",
+            tmp_path,
+        )
+        mock_parser.parse_pdf_all_chapters.return_value = {
+            '5. Interaction Flow': '# Test Markdown',
+            '1. Overview': 'overview content',
+        }
 
         response = client.post(f'{BASE}/parse-pdf', files={
             'file': ('test.pdf', BytesIO(b'%PDF-1.4 test'))
@@ -141,17 +149,21 @@ class TestParsePdfEndpoint:
 
         assert response.status_code == 200
         assert response.json()['data']['steps_md'] == "# Test Markdown"
+        # the manager strips the .pdf extension when storing
+        stored = json.loads((tmp_path / 'test.json').read_text(encoding='utf-8'))
+        assert stored['chapters']['1. Overview'] == 'overview content'
+        assert 'workflow_id' not in stored
 
     def test_parse_pdf_parse_failure(self, client, mock_parser):
-        """Test parsing failure (chapter not found)"""
-        mock_parser.parse_pdf_chapter.return_value = None
+        """Test parsing failure (no chapters extracted)"""
+        mock_parser.parse_pdf_all_chapters.return_value = {}
 
         response = client.post(f'{BASE}/parse-pdf', files={
             'file': ('test.pdf', BytesIO(b'%PDF-1.4 test'))
         })
 
         assert response.status_code == 400
-        assert 'not found in PDF' in response.json()['message']
+        assert 'No chapters found in PDF' in response.json()['message']
 
 
 class TestPlanEndpoint:
