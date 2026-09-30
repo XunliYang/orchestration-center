@@ -109,10 +109,16 @@ class AgentCardLoader:
         self._cards_dir = Path(cards_dir)
         if not self._cards_dir.is_dir():
             raise ValueError(f"Agent cards directory not found: {self._cards_dir}")
+        # Names of cards loaded from a "registry_only" subdirectory: they are
+        # registered in the registry but never get a local agent instance.
+        self.registration_only_names: set[str] = set()
 
     def _iter_card_files(self):
+        # Recursive: agentcard/instances/ holds cards with local instances,
+        # agentcard/registry_only/ holds registration-only cards, and any
+        # cards directly under the top directory keep working as instances.
         for ext in ("*.yaml", "*.yml", "*.json"):
-            yield from sorted(self._cards_dir.glob(ext))
+            yield from sorted(self._cards_dir.rglob(ext))
 
     def _load_card_file(self, file_path: Path) -> List[Dict[str, Any]]:
         suffix = file_path.suffix.lower()
@@ -136,14 +142,28 @@ class AgentCardLoader:
         return []
 
     def get_all_agent_cards(self) -> List[AgentCard]:
-        cards = []
-        for agent_dict in self.get_raw_agent_dicts():
+        self.registration_only_names = set()
+        cards: List[AgentCard] = []
+        for file_path in self._iter_card_files():
+            # Cards under a registry_only directory are registration-only:
+            # registered in the registry, never backed by a local instance.
+            registration_only = file_path.parent.name == "registry_only"
             try:
-                normalized = _normalize_agent_dict(agent_dict)
-                agent_card = Parse(json.dumps(normalized), AgentCard())
-                cards.append(agent_card)
+                agent_dicts = self._load_card_file(file_path)
             except Exception as e:
-                logger.warning(f"Failed to parse AgentCard: {agent_dict.get('name', 'unknown')} - {e}")
+                logger.warning(f"Failed to load agent cards from {file_path}: {e}")
+                continue
+            for agent_dict in agent_dicts:
+                try:
+                    normalized = _normalize_agent_dict(agent_dict)
+                    agent_card = Parse(json.dumps(normalized), AgentCard())
+                    cards.append(agent_card)
+                    if registration_only and agent_card.name:
+                        self.registration_only_names.add(agent_card.name)
+                except Exception as e:
+                    logger.warning(f"Failed to parse AgentCard: {agent_dict.get('name', 'unknown')} - {e}")
+        if not cards:
+            raise ValueError(f"No agent card definitions found in: {self._cards_dir}")
         return cards
 
     def get_raw_agent_dicts(self) -> List[Dict[str, Any]]:

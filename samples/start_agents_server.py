@@ -191,6 +191,9 @@ async def main() -> None:
     try:
         agent_lib = AgentCardLoader(Path(__file__).parent / "agentcard")
         agent_cards = agent_lib.get_all_agent_cards()
+        # Cards under agentcard/registry_only are registered in the registry
+        # but never get a local agent instance (no execution backend).
+        registration_only = set(agent_lib.registration_only_names)
     except Exception as e:
         logger.error(f"Failed to load agent cards: {e}")
         return
@@ -216,10 +219,19 @@ async def main() -> None:
         if factory:
             try:
                 result = await register_or_update_agent(factory, agent_card)
-                logger.info(f"register/update agentcard for {agent_card.name}, result is {result}")
+                # register_or_update_agent already logs a concise outcome; the
+                # raw registry response embeds the whole AgentCard JSON, so it
+                # only goes to DEBUG to keep startup logs readable.
+                logger.debug(f"register/update agentcard for {agent_card.name}, result is {result}")
             except Exception as e:
                 logger.error(f"register/update agent card failed: {e}")
         agent_name = agent_card.name
+        if agent_name in registration_only:
+            logger.info(
+                f"Agent '{agent_name}' is registration-only (agentcard/registry_only): "
+                "registered in the registry, no instance started"
+            )
+            continue
         if not agent_card.supported_interfaces:
             logger.warning(f"Skipping agent '{agent_name}': no supported interfaces")
             continue

@@ -19,6 +19,7 @@ def _sample_card():
         Path(__file__).resolve().parents[1]
         / "samples"
         / "agentcard"
+        / "instances"
         / "spn_agent_card_city1.json"
     )
     return json.loads(sample_file.read_text(encoding="utf-8"))[0]
