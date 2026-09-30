@@ -16,7 +16,7 @@
 //    under the License.
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { ArrowLeft, Upload, FileText, Link2, Clock, Loader2, RefreshCw, Trash2 } from 'lucide-react';
-import { listSolutionPackages, deleteSolutionPackage } from '../../service/api';
+import { listSolutionPackages, deleteSolutionPackage } from '../../../service/api';
 
 const stem = (filename) => filename.replace(/\.pdf$/i, '');
 
