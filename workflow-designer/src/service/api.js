@@ -169,6 +169,20 @@ export async function parsePdf(file) {
     return unwrapEnvelope(body);
 }
 
+// ──── Imported Solution Packages ────
+
+export async function listSolutionPackages() {
+    return unwrapEnvelope(await api.get(`${ORCHESTRATE_BASE()}/solution-packages`));
+}
+
+export async function getSolutionPackage(pdfFilename) {
+    return unwrapEnvelope(await api.get(`${ORCHESTRATE_BASE()}/solution-packages/${encodeURIComponent(pdfFilename)}`));
+}
+
+export async function deleteSolutionPackage(pdfFilename) {
+    return unwrapEnvelope(await api.delete(`${ORCHESTRATE_BASE()}/solution-packages/${encodeURIComponent(pdfFilename)}`));
+}
+
 // 鈹€鈹€鈹€鈹€ Workflow Generation 鈹€鈹€鈹€鈹€
 
 export async function handlePlan(preflow, agentCards) {

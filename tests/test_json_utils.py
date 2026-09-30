@@ -90,3 +90,23 @@ class TestParseLlmJsonResponse:
         result = parse_llm_json_response(content)
         assert result == {"action1": "skill1", "action2": "skill2"}
         assert isinstance(result, dict)
+
+
+def test_bare_json_without_code_fence_parses():
+    assert parse_llm_json_response('{"name": "flow", "steps": []}') == {"name": "flow", "steps": []}
+
+
+def test_json_with_leading_prose_and_trailing_text_parses():
+    text = 'Here is the workflow you asked for:\n{"name": "flow"}\nLet me know if anything else is needed.'
+    assert parse_llm_json_response(text) == {"name": "flow"}
+
+
+def test_unbalanced_json_reports_possible_truncation():
+    text = '{"name": "flow", "steps": [{"task_id": "'
+    with pytest.raises(ValueError, match="truncation"):
+        parse_llm_json_response(text)
+
+
+def test_braces_inside_strings_do_not_confuse_the_span():
+    text = 'prefix {"name": "a \\"quoted\\" {brace} case"} suffix'
+    assert parse_llm_json_response(text) == {"name": 'a "quoted" {brace} case'}

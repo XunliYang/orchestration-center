@@ -17,6 +17,7 @@
 
 import json
 import os
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional, Any, Union
 from loguru import logger
@@ -77,7 +78,8 @@ class SolutionPackageManager:
                 "pdf_filename": pdf_filename,
                 "chapters": chapters_dict,
                 "chapter_count": len(chapters_dict),
-                "chapter_titles": list(chapters_dict.keys())
+                "chapter_titles": list(chapters_dict.keys()),
+                "created_at": datetime.now(timezone.utc).isoformat()
             }
 
             # Write JSON file

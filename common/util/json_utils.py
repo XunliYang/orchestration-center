@@ -7,6 +7,45 @@ from typing import Any, Dict, List, Optional, Type, Union
 from loguru import logger
 from pydantic import BaseModel
 
+
+
+def _extract_json_span(text: str) -> Optional[str]:
+    """Return the outermost balanced {...} or [...] span in *text*, or None.
+
+    Honors string literals (braces inside quoted strings do not affect depth).
+    Returns None when no opening brace/bracket exists, or when the span never
+    closes -- the latter usually means the answer was cut off by an output
+    token limit.
+    """
+    for opener, closer in (("{", "}"), ("[", "]")):
+        start = text.find(opener)
+        if start == -1:
+            continue
+        depth = 0
+        in_str = False
+        escaped = False
+        for index in range(start, len(text)):
+            ch = text[index]
+            if in_str:
+                if escaped:
+                    escaped = False
+                elif ch == "\\":
+                    escaped = True
+                elif ch == '"':
+                    in_str = False
+                continue
+            if ch == '"':
+                in_str = True
+            elif ch == opener:
+                depth += 1
+            elif ch == closer:
+                depth -= 1
+                if depth == 0:
+                    return text[start:index + 1]
+        return None
+    return None
+
+
 def parse_llm_json_response(
     llm_response: str,
     output_model: Optional[Type[BaseModel]] = None,
@@ -27,13 +66,22 @@ def parse_llm_json_response(
         ValueError: If no JSON block found, content is empty, or JSON is invalid.
     """
     matches = re.findall(r'```json(.*?)```', llm_response, re.DOTALL)
-    if not matches:
-        preview = llm_response[:200] if len(llm_response) > 200 else llm_response
-        error_msg = f"No JSON code block found in LLM answer. Response preview: {preview}"
-        logger.error(error_msg)
-        raise ValueError(error_msg)
-
-    json_str = matches[-1].strip()
+    json_str: Optional[str] = None
+    if matches:
+        json_str = matches[-1].strip()
+    else:
+        # Models do not always honor the ```json fence request: accept a bare
+        # JSON object/array as well (leading/trailing prose is tolerated).
+        json_str = _extract_json_span(llm_response)
+        if json_str is None:
+            preview = llm_response[:200] if len(llm_response) > 200 else llm_response
+            error_msg = (
+                "No JSON code block found in LLM answer and no balanced JSON "
+                "object/array detected (possible output truncation by the "
+                f"model's max-token limit). Response preview: {preview}"
+            )
+            logger.error(error_msg)
+            raise ValueError(error_msg)
     if not json_str:
         preview = llm_response[:200] if len(llm_response) > 200 else llm_response
         error_msg = f"Empty JSON content found in code block. Response preview: {preview}"

@@ -63,12 +63,13 @@ from orchestrate.core.model.psop import PSOP
 from orchestrate.core.persistence import WorkflowStorageError
 from orchestrate.server.external_api import router as external_router
 from orchestrate.server.sandbox_api import sandbox_router, sandbox_service
-from orchestrate.core.psop_generator import PsopGenerator
+from orchestrate.core.psop_generator import PsopGenerator, WorkflowGeneratorError
 from orchestrate.core.intent_psop_generator import IntentPsopGenerator
 from orchestrate.core.workflow_search_result import WorkflowSearchResult
 from orchestrate.server.middleware import ConnectionLimitMiddleware, TimeoutMiddleware, RateLimiter, LoginRateLimiter
 from orchestrate.server.shared_handlers import SharedHandlers
 from orchestrate.solution_package.parse_flow import SolutionPackageParser
+from orchestrate.solution_package.manager import SolutionPackageManager
 from orchestrate.server.auth import (
     is_auth_enabled,
     get_session_store,
@@ -81,6 +82,8 @@ from orchestrate.server.auth import (
     set_session_cookie,
     clear_session_cookie,
 )
+
+solution_package_manager = SolutionPackageManager()
 
 app = FastAPI(title="Workflow Orchestration API", version="1.0.0", docs_url=None, redoc_url=None, openapi_url=None)
 
@@ -628,9 +631,15 @@ async def parse_pdf(
 
         parser = SolutionPackageParser()
         # fitz 解析是 CPU 密集的同步调用,必须卸载到线程,否则阻塞事件循环
-        pre_md = await anyio.to_thread.run_sync(
-            parser.parse_pdf_chapter, tmp_file_path, "5. Interaction Flow", abandon_on_cancel=False,
+        chapters_md = await anyio.to_thread.run_sync(
+            parser.parse_pdf_all_chapters, tmp_file_path, abandon_on_cancel=False,
         )
+        if not chapters_md:
+            raise HTTPException(status_code=400, detail="No chapters found in PDF")
+        # 全量章节落库,供解决方案中心列表/详情使用
+        if not solution_package_manager.store_solution_package(filename, chapters_md):
+            logger.warning(f"Failed to store solution package for {filename}")
+        pre_md = chapters_md.get("5. Interaction Flow")
         if not pre_md:
             raise HTTPException(status_code=400, detail="Chapter '5. Interaction Flow' not found in PDF")
 
@@ -655,6 +664,36 @@ async def parse_pdf(
             os.unlink(tmp_file_path)
         if acquired:
             parse_pdf_semaphore.release()
+
+# ──── Imported Solution Packages (stored by /parse-pdf) ────
+
+@router.get("/solution-packages")
+async def list_solution_packages(
+    _: Any = Depends(RateLimiter(config, "list_solution_packages"))
+):
+    return ok(data=solution_package_manager.retrieve_all())
+
+
+@router.get("/solution-packages/{pdf_filename}")
+async def get_solution_package(
+    pdf_filename: str,
+    _: Any = Depends(RateLimiter(config, "get_solution_package"))
+):
+    package = solution_package_manager.retrieve_by_filename(pdf_filename)
+    if package is None:
+        raise HTTPException(status_code=404, detail=f"Solution package not found: {pdf_filename}")
+    return ok(data=package)
+
+
+@router.delete("/solution-packages/{pdf_filename}")
+async def delete_solution_package(
+    pdf_filename: str,
+    _: Any = Depends(RateLimiter(config, "delete_solution_package"))
+):
+    deleted = solution_package_manager.delete_by_filename(pdf_filename)
+    if not deleted:
+        raise HTTPException(status_code=404, detail=f"Solution package not found: {pdf_filename}")
+    return ok(data=None, message=f"Solution package deleted: {pdf_filename}")
 
 plan_semaphore = anyio.Semaphore(int(config.get(FLOW_CTL_PARALLEL_PLAN, 10)))
 
@@ -695,6 +734,12 @@ async def generate_from_preflow(
         raise HTTPException(status_code=503, detail="Server is busy")
     except HTTPException:
         raise
+    except WorkflowGeneratorError as e:
+        # Business condition: the solution package references tasks no
+        # registered agent can perform. 422 lets the UI show the unmatched
+        # actions instead of a generic server error.
+        logger.warning(f"PreFlow generation cannot match agents: {e}")
+        raise HTTPException(status_code=422, detail=str(e))
     except Exception as e:
         logger.error(f"PreFlow generation failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -751,6 +796,11 @@ async def generate_from_intent(
         raise HTTPException(status_code=503, detail="Server is busy")
     except HTTPException:
         raise
+    except WorkflowGeneratorError as e:
+        # Business condition: the intent's tasks cannot be matched to any
+        # registered agent skill.
+        logger.warning(f"Intent generation cannot match agents: {e}")
+        raise HTTPException(status_code=422, detail=str(e))
     except Exception as e:
         logger.error(f"Intent generation failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
