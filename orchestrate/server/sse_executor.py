@@ -17,11 +17,11 @@
 
 """Shared SSE execution endpoint.
 
-The orchestration center does NOT execute workflows itself. It sends
-the intent to the Workbench Agent via A2A-T, which searches/loads the
-PSOP, executes the workflow, and streams SDK events back as A2A-T
-TaskUpdate metadata (__sdk_event__). This module drains the stream
-and forwards events to the frontend SSE.
+The orchestration center does NOT execute workflows itself. It searches
+and loads the PSOP, dispatches the intent together with the PSOP snapshot
+to the Host Agent via A2A-T, which executes the workflow and streams SDK
+events back as A2A-T TaskUpdate metadata (__sdk_event__). This module
+drains the stream and forwards events to the frontend SSE.
 """
 
 import asyncio
