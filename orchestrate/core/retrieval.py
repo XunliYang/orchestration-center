@@ -1,4 +1,4 @@
-# Copyright (c) 2026 Huawei Technologies Co., Ltd.
+﻿# Copyright (c) 2026 Huawei Technologies Co., Ltd.
 # All Rights Reserved.
 #
 # SPDX-License-Identifier: Apache-2.0
@@ -22,10 +22,10 @@ from typing import Optional, List
 from loguru import logger
 
 from common.custom import HandlerRegistry, InterfaceType
-from common.custom.psop_processor import build_tasks_summary
+from orchestrate.handlers.psop_processor import build_tasks_summary
 from common.llm import get_llm_instance
-from common.util.config_util import get_conf
 from common.util.json_utils import parse_llm_json_response
+from common.util.persistence_mode import is_db_mode
 from orchestrate.core.model.preflow import PreFlow
 from orchestrate.core.model.psop import PSOP
 from orchestrate.core.persistence import WorkflowStorage
@@ -51,7 +51,7 @@ def _detect_intent_lang(text: str) -> Optional[str]:
 class WorkflowRetrieval:
     def __init__(self, storage: WorkflowStorage):
         self.storage = storage
-        self._db_mode = get_conf().get("persistence_mode", "file").lower() != "file"
+        self._db_mode = is_db_mode()
 
     def _list_psop_summaries(self) -> List[WorkflowSearchResult]:
         if self._db_mode:

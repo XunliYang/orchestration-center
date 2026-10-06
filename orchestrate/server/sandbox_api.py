@@ -1,4 +1,4 @@
-# Copyright (c) 2026 Huawei Technologies Co., Ltd.
+﻿# Copyright (c) 2026 Huawei Technologies Co., Ltd.
 # All Rights Reserved.
 #
 # SPDX-License-Identifier: Apache-2.0
@@ -33,7 +33,7 @@ from orchestrate.sandbox.service import SandboxService
 from orchestrate.sandbox.store import SandboxStore
 from orchestrate.server.middleware import RateLimiter
 from orchestrate.server.response_utils import created, get_agent_cards, ok
-from orchestrate.server.shared_handlers import SharedHandlers
+from orchestrate.core.shared_handlers import SharedHandlers
 
 config = get_conf()
 sandbox_service = SandboxService(

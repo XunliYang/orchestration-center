@@ -30,6 +30,7 @@ from common.util.cipher_converter import CipherConverter
 from common.util.cipher_util import DEFAULT_ENCODING
 from common.util.conf_util import get_conf_singleton, set_ssl_folder_permissions, load_cert_password
 from common.util.config_util import get_conf
+from common.util.persistence_mode import is_db_mode, validate_storage_mode
 from database.utils.table_creation import create_tables
 from database.utils.user_store import seed_admin_if_empty
 from orchestrate.server.frontend_support_server import app
@@ -157,7 +158,8 @@ def main():
     server_config = get_conf()
     is_https = server_config.get("enable_https", True)
     is_enable_https = str(is_https).lower() == 'true'
-    if server_config.get('persistence_mode', 'file').lower() != 'file':
+    validate_storage_mode()
+    if is_db_mode():
         create_tables()
         # Seed default admin user if users table is empty. user_store now
         # hashes the real plaintext password server-side (see #9), so this

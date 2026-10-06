@@ -51,12 +51,14 @@ from common.config import (
 )
 from common.custom.default_handle import HandlerRegistry
 from common.custom.interface_type import InterfaceType
+import orchestrate.handlers  # noqa: F401  - registers the bundled storage handlers
 from orchestrate.server.sse_executor import dispatch_intent_sse
 from orchestrate.server.response_utils import ok, created, error, get_agent_cards
 from orchestrate.registry_client.client_factory import AgentRegistryClientFactory
 from orchestrate.agentcard_loader import _normalize_agent_dict
 from common.log.audit_logger import audit_logger, OperationObject, OperationName, LogLevel, OperationResult
 from common.util.config_util import get_conf
+from common.util.persistence_mode import is_db_mode
 from common.util.password_hash import FILE_HASH_PREFIX, hash_password, verify_legacy_bcrypt, verify_password
 from orchestrate.core.model.preflow import PreFlow
 from orchestrate.core.model.psop import PSOP
@@ -67,7 +69,7 @@ from orchestrate.core.psop_generator import PsopGenerator, WorkflowGeneratorErro
 from orchestrate.core.intent_psop_generator import IntentPsopGenerator
 from orchestrate.core.workflow_search_result import WorkflowSearchResult
 from orchestrate.server.middleware import ConnectionLimitMiddleware, TimeoutMiddleware, RateLimiter, LoginRateLimiter
-from orchestrate.server.shared_handlers import SharedHandlers
+from orchestrate.core.shared_handlers import SharedHandlers
 from orchestrate.solution_package.parse_flow import SolutionPackageParser
 from orchestrate.solution_package.manager import SolutionPackageManager
 from orchestrate.server.auth import (
@@ -250,7 +252,7 @@ class RegisterRequest(BaseModel):
 
 
 def _registration_enabled(conf: dict) -> bool:
-    return (conf.get("persistence_mode", "file").lower() == "postgresql"
+    return (is_db_mode(conf)
             and str(conf.get("auth.register.enabled", False)).lower() in ("true", "1", "yes"))
 
 
@@ -259,8 +261,8 @@ async def login(request: LoginRequest, response: Response, _: Any = Depends(Logi
     if not is_auth_enabled():
         return ok(data={"auth_required": False}, message="Authentication disabled")
     conf = get_conf()
-    is_db_mode = conf.get("persistence_mode", "file").lower() == "postgresql"
-    if is_db_mode:
+    db_mode = is_db_mode(conf)
+    if db_mode:
         from database.utils.user_store import authenticate_user
         user = authenticate_user(request.username, request.password)
         if user is not None:
@@ -300,7 +302,7 @@ async def register(request: RegisterRequest):
     conf = get_conf()
     if not _registration_enabled(conf):
         raise HTTPException(status_code=403, detail="Self-registration is disabled")
-    if conf.get("persistence_mode", "file").lower() != "postgresql":
+    if not is_db_mode(conf):
         raise HTTPException(status_code=400, detail="Registration requires PostgreSQL persistence mode")
     if not re.fullmatch(r"^[a-zA-Z][a-zA-Z0-9_-]{2,63}$", request.username):
         raise HTTPException(status_code=400, detail="Username must start with a letter and contain only letters, digits, underscores or hyphens (3-64 chars)")
@@ -417,12 +419,12 @@ def _update_access_password_in_conf(conf_path: str, new_password: str) -> bool:
 async def change_password(request: ChangePasswordRequest, http_request: Request):
     """Change the current user's password. Requires a valid token."""
     conf = get_conf()
-    is_db_mode = conf.get("persistence_mode", "file").lower() == "postgresql"
+    db_mode = is_db_mode(conf)
     token = extract_token(http_request)
     username = get_session_store().get_username(token) if token else None
     if not username:
         raise HTTPException(status_code=401, detail="Not authenticated")
-    if is_db_mode:
+    if db_mode:
         from common.util.password_util import validate_password_complexity
         is_valid, reason = validate_password_complexity(request.new_password)
         if not is_valid:

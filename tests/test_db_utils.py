@@ -1,4 +1,4 @@
-# Copyright (c) 2026 Huawei Technologies Co., Ltd.
+﻿# Copyright (c) 2026 Huawei Technologies Co., Ltd.
 # All Rights Reserved.
 #
 # SPDX-License-Identifier: Apache-2.0
@@ -89,7 +89,7 @@ class TestExecuteQuery:
 
 class TestDbSaveExecutionRecord:
     def test_success(self):
-        from common.custom.execution_record_processor import db_save_execution_record
+        from orchestrate.handlers.execution_record_processor import db_save_execution_record
         mock_conn = MagicMock()
         mock_cur = MagicMock()
         mock_conn.cursor.return_value = mock_cur
@@ -103,21 +103,21 @@ class TestDbSaveExecutionRecord:
         record.status = "success"
         record.execution_history = []
         record.model_dump_json.return_value = '{"key":"val"}'
-        with patch("common.custom.execution_record_processor.create_connection", return_value=mock_conn):
+        with patch("orchestrate.handlers.execution_record_processor.create_connection", return_value=mock_conn):
             result = db_save_execution_record(record)
             assert result == "exec-1"
             mock_conn.close.assert_called_once()
 
     def test_conn_none_raises(self):
-        from common.custom.execution_record_processor import db_save_execution_record
+        from orchestrate.handlers.execution_record_processor import db_save_execution_record
         record = MagicMock()
         record.execution_id = "exec-2"
-        with patch("common.custom.execution_record_processor.create_connection", return_value=None):
+        with patch("orchestrate.handlers.execution_record_processor.create_connection", return_value=None):
             with pytest.raises(RuntimeError, match="Unable to connect"):
                 db_save_execution_record(record)
 
     def test_query_error_raises(self):
-        from common.custom.execution_record_processor import db_save_execution_record
+        from orchestrate.handlers.execution_record_processor import db_save_execution_record
         mock_conn = MagicMock()
         mock_cur = MagicMock()
         mock_cur.execute.side_effect = Exception("constraint violation")
@@ -131,7 +131,7 @@ class TestDbSaveExecutionRecord:
         record.status = "success"
         record.execution_history = []
         record.model_dump_json.return_value = "{}"
-        with patch("common.custom.execution_record_processor.create_connection", return_value=mock_conn):
+        with patch("orchestrate.handlers.execution_record_processor.create_connection", return_value=mock_conn):
             with pytest.raises(RuntimeError, match="Failed to save"):
                 db_save_execution_record(record)
 
@@ -142,14 +142,14 @@ class TestDbSaveExecutionRecord:
 
 class TestDbListExecutionRecords:
     def test_success(self):
-        from common.custom.execution_record_processor import db_list_execution_records
+        from orchestrate.handlers.execution_record_processor import db_list_execution_records
         mock_conn = MagicMock()
         mock_cur = MagicMock()
         mock_cur.fetchall.return_value = [
             ("e1", "psop1", "WF1", None, None, "success", 3, '{"error": null}'),
         ]
         mock_conn.cursor.return_value = mock_cur
-        with patch("common.custom.execution_record_processor.create_connection", return_value=mock_conn):
+        with patch("orchestrate.handlers.execution_record_processor.create_connection", return_value=mock_conn):
             result = db_list_execution_records()
             assert len(result) == 1
             assert result[0]["execution_id"] == "e1"
@@ -157,23 +157,23 @@ class TestDbListExecutionRecords:
             assert result[0]["error"] is None
 
     def test_empty_results(self):
-        from common.custom.execution_record_processor import db_list_execution_records
+        from orchestrate.handlers.execution_record_processor import db_list_execution_records
         mock_conn = MagicMock()
         mock_cur = MagicMock()
         mock_cur.fetchall.return_value = []
         mock_conn.cursor.return_value = mock_cur
-        with patch("common.custom.execution_record_processor.create_connection", return_value=mock_conn):
+        with patch("orchestrate.handlers.execution_record_processor.create_connection", return_value=mock_conn):
             result = db_list_execution_records()
             assert result == []
 
     def test_conn_none_returns_empty(self):
-        from common.custom.execution_record_processor import db_list_execution_records
-        with patch("common.custom.execution_record_processor.create_connection", return_value=None):
+        from orchestrate.handlers.execution_record_processor import db_list_execution_records
+        with patch("orchestrate.handlers.execution_record_processor.create_connection", return_value=None):
             result = db_list_execution_records()
             assert result == []
 
     def test_datetimes_converted(self):
-        from common.custom.execution_record_processor import db_list_execution_records
+        from orchestrate.handlers.execution_record_processor import db_list_execution_records
         import datetime as dt
         mock_conn = MagicMock()
         mock_cur = MagicMock()
@@ -182,20 +182,20 @@ class TestDbListExecutionRecords:
             ("e1", "psop1", "WF1", ts, ts, "success", 1, None),
         ]
         mock_conn.cursor.return_value = mock_cur
-        with patch("common.custom.execution_record_processor.create_connection", return_value=mock_conn):
+        with patch("orchestrate.handlers.execution_record_processor.create_connection", return_value=mock_conn):
             result = db_list_execution_records()
             assert result[0]["started_at"] == "2025-01-01T12:00:00"
             assert result[0]["completed_at"] == "2025-01-01T12:00:00"
 
     def test_invalid_json_content(self):
-        from common.custom.execution_record_processor import db_list_execution_records
+        from orchestrate.handlers.execution_record_processor import db_list_execution_records
         mock_conn = MagicMock()
         mock_cur = MagicMock()
         mock_cur.fetchall.return_value = [
             ("e1", "psop1", "WF1", None, None, "success", 1, "{bad json"),
         ]
         mock_conn.cursor.return_value = mock_cur
-        with patch("common.custom.execution_record_processor.create_connection", return_value=mock_conn):
+        with patch("orchestrate.handlers.execution_record_processor.create_connection", return_value=mock_conn):
             result = db_list_execution_records()
             assert len(result) == 1
             assert result[0]["error"] is None  # default on parse failure
@@ -207,29 +207,29 @@ class TestDbListExecutionRecords:
 
 class TestDbGetExecutionRecord:
     def test_found(self):
-        from common.custom.execution_record_processor import db_get_execution_record
+        from orchestrate.handlers.execution_record_processor import db_get_execution_record
         mock_conn = MagicMock()
         mock_cur = MagicMock()
         record_json = '{"execution_id": "e1", "psop_id": "p1", "psop_name": "WF", "started_at": "2025-01-01T00:00:00", "completed_at": "2025-01-01T01:00:00", "status": "success", "execution_history": [], "events": [], "final_psop": null, "error": null}'
         mock_cur.fetchall.return_value = [(record_json,)]
         mock_conn.cursor.return_value = mock_cur
-        with patch("common.custom.execution_record_processor.create_connection", return_value=mock_conn):
+        with patch("orchestrate.handlers.execution_record_processor.create_connection", return_value=mock_conn):
             result = db_get_execution_record("e1")
             assert result is not None
 
     def test_not_found(self):
-        from common.custom.execution_record_processor import db_get_execution_record
+        from orchestrate.handlers.execution_record_processor import db_get_execution_record
         mock_conn = MagicMock()
         mock_cur = MagicMock()
         mock_cur.fetchall.return_value = []
         mock_conn.cursor.return_value = mock_cur
-        with patch("common.custom.execution_record_processor.create_connection", return_value=mock_conn):
+        with patch("orchestrate.handlers.execution_record_processor.create_connection", return_value=mock_conn):
             result = db_get_execution_record("nonexistent")
             assert result is None
 
     def test_conn_none(self):
-        from common.custom.execution_record_processor import db_get_execution_record
-        with patch("common.custom.execution_record_processor.create_connection", return_value=None):
+        from orchestrate.handlers.execution_record_processor import db_get_execution_record
+        with patch("orchestrate.handlers.execution_record_processor.create_connection", return_value=None):
             result = db_get_execution_record("e1")
             assert result is None
 
@@ -240,38 +240,38 @@ class TestDbGetExecutionRecord:
 
 class TestDbDeleteExecutionRecord:
     def test_success(self):
-        from common.custom.execution_record_processor import db_delete_execution_record
+        from orchestrate.handlers.execution_record_processor import db_delete_execution_record
         mock_conn = MagicMock()
         mock_cur = MagicMock()
         mock_cur.rowcount = 1
         mock_conn.cursor.return_value = mock_cur
-        with patch("common.custom.execution_record_processor.create_connection", return_value=mock_conn):
+        with patch("orchestrate.handlers.execution_record_processor.create_connection", return_value=mock_conn):
             result = db_delete_execution_record("e1")
             assert result is True
             mock_conn.commit.assert_called_once()
 
     def test_not_found(self):
-        from common.custom.execution_record_processor import db_delete_execution_record
+        from orchestrate.handlers.execution_record_processor import db_delete_execution_record
         mock_conn = MagicMock()
         mock_cur = MagicMock()
         mock_cur.rowcount = 0
         mock_conn.cursor.return_value = mock_cur
-        with patch("common.custom.execution_record_processor.create_connection", return_value=mock_conn):
+        with patch("orchestrate.handlers.execution_record_processor.create_connection", return_value=mock_conn):
             result = db_delete_execution_record("nonexistent")
             assert result is False
 
     def test_conn_none(self):
-        from common.custom.execution_record_processor import db_delete_execution_record
-        with patch("common.custom.execution_record_processor.create_connection", return_value=None):
+        from orchestrate.handlers.execution_record_processor import db_delete_execution_record
+        with patch("orchestrate.handlers.execution_record_processor.create_connection", return_value=None):
             result = db_delete_execution_record("e1")
             assert result is False
 
     def test_exception_returns_false(self):
-        from common.custom.execution_record_processor import db_delete_execution_record
+        from orchestrate.handlers.execution_record_processor import db_delete_execution_record
         mock_conn = MagicMock()
         mock_cur = MagicMock()
         mock_cur.execute.side_effect = Exception("conn lost")
         mock_conn.cursor.return_value = mock_cur
-        with patch("common.custom.execution_record_processor.create_connection", return_value=mock_conn):
+        with patch("orchestrate.handlers.execution_record_processor.create_connection", return_value=mock_conn):
             result = db_delete_execution_record("e1")
             assert result is False

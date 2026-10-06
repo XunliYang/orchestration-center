@@ -15,15 +15,18 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+"""Database-mode storage handlers: BaseHandler adapters over the SQL processors."""
+
+from loguru import logger
+
 from common.custom.default_handle import BaseHandler
-from common.custom.psop_processor import custom_save_psop, custom_delete_psop, get_all_psops, get_psop_by_id
-from common.custom.execution_record_processor import (
+from orchestrate.handlers.psop_processor import custom_save_psop, custom_delete_psop, get_all_psops, get_psop_by_id
+from orchestrate.handlers.execution_record_processor import (
     db_save_execution_record,
     db_list_execution_records,
     db_get_execution_record,
     db_delete_execution_record,
 )
-from loguru import logger
 
 
 class CustomSavePsopHandler(BaseHandler):

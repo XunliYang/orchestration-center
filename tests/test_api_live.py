@@ -1,4 +1,4 @@
-# Copyright (c) 2026 Huawei Technologies Co., Ltd.
+﻿# Copyright (c) 2026 Huawei Technologies Co., Ltd.
 # All Rights Reserved.
 #
 # SPDX-License-Identifier: Apache-2.0
@@ -62,9 +62,9 @@ def mock_deps():
 
     with patch.object(app.state, 'semaphore', False, create=True), \
          patch('orchestrate.server.frontend_support_server.agent_cards_semaphore') as mock_sem, \
-         patch('orchestrate.server.shared_handlers.SharedHandlers.save_psop', return_value=fake_save), \
-         patch('orchestrate.server.shared_handlers.SharedHandlers.delete_psop', return_value=fake_delete), \
-         patch('orchestrate.server.shared_handlers.SharedHandlers.retrieval', return_value=fake_retrieval), \
+         patch('orchestrate.core.shared_handlers.SharedHandlers.save_psop', return_value=fake_save), \
+         patch('orchestrate.core.shared_handlers.SharedHandlers.delete_psop', return_value=fake_delete), \
+         patch('orchestrate.core.shared_handlers.SharedHandlers.retrieval', return_value=fake_retrieval), \
          patch('orchestrate.server.frontend_support_server.PsopGenerator', return_value=fake_psop_gen), \
          patch('orchestrate.server.frontend_support_server.IntentPsopGenerator', return_value=fake_intent_gen), \
          patch('orchestrate.server.frontend_support_server.SolutionPackageParser', return_value=fake_parser), \

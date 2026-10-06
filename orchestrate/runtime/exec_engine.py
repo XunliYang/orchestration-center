@@ -38,6 +38,8 @@ from a2a.types import Part
 from loguru import logger
 from workflow_engine import A2ATransport, MessageContent, WorkflowEngineClient
 
+from orchestrate.core.shared_handlers import SharedHandlers
+
 try:
     from a2a_t.llm.factory import LLMClientFactory as _LLMFactory
     from a2a_t.llm.providers.openai import OpenAIClient as _OpenAIClient
@@ -91,8 +93,6 @@ class OrchestrationEngine:
 
     async def events(self, intent: str) -> AsyncIterator[dict]:
         """Search PSOP for preview, dispatch to target agent, stream back events."""
-        from orchestrate.server.shared_handlers import SharedHandlers
-
         yield {
             "type": "start",
             "data": {"workflow": intent[:80], "intent": intent, "phase": "searching", "target_agent": self._target_agent},

@@ -1,4 +1,4 @@
-# Copyright (c) 2026 Huawei Technologies Co., Ltd.
+﻿# Copyright (c) 2026 Huawei Technologies Co., Ltd.
 # All Rights Reserved.
 #
 # SPDX-License-Identifier: Apache-2.0
@@ -54,15 +54,15 @@ def client():
 @pytest.fixture
 def mock_storage():
     """Mock SharedHandlers save/delete"""
-    with patch('orchestrate.server.shared_handlers.SharedHandlers.save_psop'), \
-         patch('orchestrate.server.shared_handlers.SharedHandlers.delete_psop'):
+    with patch('orchestrate.core.shared_handlers.SharedHandlers.save_psop'), \
+         patch('orchestrate.core.shared_handlers.SharedHandlers.delete_psop'):
         yield
 
 
 @pytest.fixture
 def mock_retrieval():
     """Mock WorkflowRetrieval via SharedHandlers"""
-    with patch('orchestrate.server.shared_handlers.SharedHandlers.retrieval') as mock:
+    with patch('orchestrate.core.shared_handlers.SharedHandlers.retrieval') as mock:
         inner = MagicMock()
         mock.return_value = inner
         yield inner
