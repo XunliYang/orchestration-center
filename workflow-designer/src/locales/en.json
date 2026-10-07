@@ -27,7 +27,9 @@
     "change_password": "Change Password",
     "current_password": "Current Password",
     "new_password": "New Password",
-    "must_change_password": "This account is using a default password. Choose a new password to continue."
+    "must_change_password": "This account is using a default password. Choose a new password to continue.",
+    "backend_unreachable": "Cannot reach the orchestration backend. Make sure the service is running, then retry.",
+    "retry": "Retry"
   },
   "execution": {
     "title": "Execution Center",

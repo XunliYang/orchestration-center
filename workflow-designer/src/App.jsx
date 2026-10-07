@@ -15,7 +15,8 @@
 //    License for the specific language governing permissions and limitations
 //    under the License.
 import {useTranslation} from "react-i18next";
-import {useEffect, useState} from "react";
+import {useCallback, useEffect, useState} from "react";
+import {ServerOff} from "lucide-react";
 import Header from "@/components/common/header/index.jsx";
 import Login from "@/components/common/login/index.jsx";
 import PasswordChangeModal from "@/components/common/password_change/index.jsx";
@@ -52,7 +53,7 @@ const MainContainer = () => {
         return (savedTheme || 'dark') === 'dark';
     });
 
-    useEffect(() => {
+    const runAuthCheck = useCallback(() => {
         authCheck()
             .then((data) => {
                if (data.auth_required === false || data.authenticated === true) {
@@ -64,8 +65,12 @@ const MainContainer = () => {
                    setAuthState('unauthenticated');
                }
             })
-            .catch(() => setAuthState('unauthenticated'));
+            .catch(() => setAuthState('unreachable'));
     }, []);
+
+    useEffect(() => {
+        runAuthCheck();
+    }, [runAuthCheck]);
 
     useEffect(() => {
         const handleAuthExpired = () => setAuthState('unauthenticated');
@@ -131,6 +136,29 @@ const MainContainer = () => {
         {authState === 'checking' ? (
             <div className="h-screen flex items-center justify-center bg-zinc-50 dark:bg-[#09090B]">
                 <div className="text-zinc-400 text-sm animate-pulse">Loading...</div>
+            </div>
+        ) : authState === 'unreachable' ? (
+            // The backend did not answer at all (connection refused/reset, TLS
+            // mismatch, ...). This must NOT look like a login prompt: the user
+            // would start guessing credentials for a service that is simply
+            // down (see the login fast-path that accepts any password when
+            // authentication is disabled).
+            <div data-testid="backend-unreachable" className="h-screen flex flex-col items-center justify-center gap-4 bg-zinc-50 dark:bg-[#09090B]">
+                <ServerOff size={40} className="text-zinc-400"/>
+                <div className="text-zinc-500 dark:text-zinc-400 text-sm text-center max-w-md px-6">
+                    {t('login.backend_unreachable')}
+                </div>
+                <button
+                    type="button"
+                    data-testid="retry-backend-connection"
+                    onClick={() => {
+                        setAuthState('checking');
+                        runAuthCheck();
+                    }}
+                    className="px-4 py-2 rounded-lg text-sm font-medium bg-zinc-100 dark:bg-zinc-800 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-all"
+                >
+                    {t('login.retry')}
+                </button>
             </div>
         ) : authState !== 'authenticated' ? (
            <Login
