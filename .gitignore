@@ -18,6 +18,7 @@ workflow-designer/stats.html
 # and the pre-seeded SPN demo workflow so fresh clones can run the demo).
 data/*
 !data/workflow_templates/
+!data/workflow_storage/
 data/workflow_storage/*
 !data/workflow_storage/psop/
 data/workflow_storage/psop/*
