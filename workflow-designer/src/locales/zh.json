@@ -27,7 +27,9 @@
     "change_password": "修改密码",
     "current_password": "当前密码",
     "new_password": "新密码",
-    "must_change_password": "该账户正在使用默认密码，请设置新密码后继续。"
+    "must_change_password": "该账户正在使用默认密码，请设置新密码后继续。",
+    "backend_unreachable": "无法连接编排中心后端，请确认服务已启动后重试。",
+    "retry": "重试"
   },
   "execution": {
     "title": "工作流执行",
