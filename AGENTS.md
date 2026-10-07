@@ -141,6 +141,7 @@ etc/conf/              # server.conf, server.properties, db_config.json
 samples/agent_credentials.json  # sample AgentCard credential bindings
 tests/                 # All tests (pytest, 57 files + conftest.py)
 data/workflow_storage/ # File-based persistence (PSOP, PreFlow, execution records)
+data/solution_packages/   # Imported solution package records + committed TM Forum IG1526A demo seed
 ```
 
 ## Conventions & gotchas
