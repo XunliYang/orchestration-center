@@ -390,6 +390,14 @@ The internal API (`/rest/v1/orchestrate/*`) is protected by token-based authenti
 - Username is fixed as `admin`.
 - Registration is not available.
 
+### Sample Agent Credentials
+
+The bundled sample agents authenticate against **localhost-only demo endpoints** using platform factory-default credentials committed in `samples/agent_credentials.json`. This file exists so the demo topology works out of the box; it is read by the sample agents, not by the orchestration backend.
+
+For anything beyond the local demo, do not reuse these defaults:
+- Point the process at an external, protected credentials file via the `ORCH_AGENT_CREDENTIALS_FILE` environment variable (or the `agent_credentials_file` config key), or
+- Keep the file layout but store encrypted values: any value prefixed with `enc:` is decrypted with the AES-GCM key in `A2AT_CRED_KEY` (provided by the workflow-engine SDK's credential crypto).
+
 | Config Key | Description | Default |
 |------------|-------------|---------|
 | `access_password` | SHA-256 hash of the login password (file mode only). Leave empty to disable auth. | empty (disabled) |

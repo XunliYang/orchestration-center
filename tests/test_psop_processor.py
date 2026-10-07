@@ -1,4 +1,4 @@
-# Copyright (c) 2026 Huawei Technologies Co., Ltd.
+﻿# Copyright (c) 2026 Huawei Technologies Co., Ltd.
 # All Rights Reserved.
 #
 # SPDX-License-Identifier: Apache-2.0
@@ -18,7 +18,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from common.custom.psop_processor import (
+from orchestrate.handlers.psop_processor import (
     build_tasks_summary,
     custom_delete_psop,
     custom_save_psop,
@@ -125,7 +125,7 @@ class TestCustomSavePsop:
         psop.name = "WF"
         psop.description = "desc"
         psop.model_dump_json.return_value = '{"id":"psop-1"}'
-        with patch("common.custom.psop_processor.create_connection", return_value=mock_conn):
+        with patch("orchestrate.handlers.psop_processor.create_connection", return_value=mock_conn):
             result = custom_save_psop(psop)
             assert result == "psop-1"
             mock_conn.close.assert_called_once()
@@ -133,7 +133,7 @@ class TestCustomSavePsop:
     def test_conn_none_raises(self):
         psop = MagicMock()
         psop.id = "psop-1"
-        with patch("common.custom.psop_processor.create_connection", return_value=None):
+        with patch("orchestrate.handlers.psop_processor.create_connection", return_value=None):
             with pytest.raises(RuntimeError, match="Unable to connect"):
                 custom_save_psop(psop)
 
@@ -147,7 +147,7 @@ class TestCustomSavePsop:
         psop.name = "WF"
         psop.description = "desc"
         psop.model_dump_json.return_value = "{}"
-        with patch("common.custom.psop_processor.create_connection", return_value=mock_conn):
+        with patch("orchestrate.handlers.psop_processor.create_connection", return_value=mock_conn):
             with pytest.raises(RuntimeError, match="Failed to save PSOP"):
                 custom_save_psop(psop)
 
@@ -162,7 +162,7 @@ class TestCustomDeletePsop:
         mock_cur = MagicMock()
         mock_cur.rowcount = 1
         mock_conn.cursor.return_value = mock_cur
-        with patch("common.custom.psop_processor.create_connection", return_value=mock_conn):
+        with patch("orchestrate.handlers.psop_processor.create_connection", return_value=mock_conn):
             result = custom_delete_psop("psop-1")
             assert result is True
             mock_conn.commit.assert_called_once()
@@ -172,12 +172,12 @@ class TestCustomDeletePsop:
         mock_cur = MagicMock()
         mock_cur.rowcount = 0
         mock_conn.cursor.return_value = mock_cur
-        with patch("common.custom.psop_processor.create_connection", return_value=mock_conn):
+        with patch("orchestrate.handlers.psop_processor.create_connection", return_value=mock_conn):
             result = custom_delete_psop("nonexistent")
             assert result is False
 
     def test_conn_none(self):
-        with patch("common.custom.psop_processor.create_connection", return_value=None):
+        with patch("orchestrate.handlers.psop_processor.create_connection", return_value=None):
             result = custom_delete_psop("psop-1")
             assert result is False
 
@@ -186,7 +186,7 @@ class TestCustomDeletePsop:
         mock_cur = MagicMock()
         mock_cur.execute.side_effect = Exception("conn lost")
         mock_conn.cursor.return_value = mock_cur
-        with patch("common.custom.psop_processor.create_connection", return_value=mock_conn):
+        with patch("orchestrate.handlers.psop_processor.create_connection", return_value=mock_conn):
             result = custom_delete_psop("psop-1")
             assert result is False
 
@@ -202,7 +202,7 @@ class TestGetAllPsops:
         psop_json = '{"id": "p1", "name": "WF1", "description": "d", "steps": [], "tags": ["t"], "created_at": "2025-01-01T00:00:00", "user_intent": "ui", "related_preflow": null}'
         mock_cur.fetchall.return_value = [(psop_json,), (psop_json,)]
         mock_conn.cursor.return_value = mock_cur
-        with patch("common.custom.psop_processor.create_connection", return_value=mock_conn):
+        with patch("orchestrate.handlers.psop_processor.create_connection", return_value=mock_conn):
             result = get_all_psops()
             assert len(result) == 2
             assert result[0].name == "WF1"
@@ -212,12 +212,12 @@ class TestGetAllPsops:
         mock_cur = MagicMock()
         mock_cur.fetchall.return_value = []
         mock_conn.cursor.return_value = mock_cur
-        with patch("common.custom.psop_processor.create_connection", return_value=mock_conn):
+        with patch("orchestrate.handlers.psop_processor.create_connection", return_value=mock_conn):
             result = get_all_psops()
             assert result == []
 
     def test_conn_none(self):
-        with patch("common.custom.psop_processor.create_connection", return_value=None):
+        with patch("orchestrate.handlers.psop_processor.create_connection", return_value=None):
             result = get_all_psops()
             assert result == []
 
@@ -233,7 +233,7 @@ class TestGetPsopById:
         psop_json = '{"id": "p1", "name": "WF1", "description": "d", "steps": [], "tags": ["t"], "created_at": "2025-01-01T00:00:00", "user_intent": "ui", "related_preflow": null}'
         mock_cur.fetchall.return_value = [(psop_json,)]
         mock_conn.cursor.return_value = mock_cur
-        with patch("common.custom.psop_processor.create_connection", return_value=mock_conn):
+        with patch("orchestrate.handlers.psop_processor.create_connection", return_value=mock_conn):
             result = get_psop_by_id("p1")
             assert result is not None
             assert result.name == "WF1"
@@ -243,11 +243,11 @@ class TestGetPsopById:
         mock_cur = MagicMock()
         mock_cur.fetchall.return_value = []
         mock_conn.cursor.return_value = mock_cur
-        with patch("common.custom.psop_processor.create_connection", return_value=mock_conn):
+        with patch("orchestrate.handlers.psop_processor.create_connection", return_value=mock_conn):
             result = get_psop_by_id("nonexistent")
             assert result is None
 
     def test_conn_none(self):
-        with patch("common.custom.psop_processor.create_connection", return_value=None):
+        with patch("orchestrate.handlers.psop_processor.create_connection", return_value=None):
             result = get_psop_by_id("p1")
             assert result is None

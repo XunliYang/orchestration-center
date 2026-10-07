@@ -15,6 +15,13 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+"""Lazily-cached accessors for the storage handlers and workflow retrieval.
+
+Lives under ``orchestrate.core`` (not ``orchestrate.server``) so the runtime
+engine and the API layer can share it without the runtime depending on the
+server package.
+"""
+
 from common.custom.default_handle import HandlerRegistry
 from common.custom.interface_type import InterfaceType
 from orchestrate.core.retrieval import WorkflowRetrieval

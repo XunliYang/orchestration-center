@@ -1,4 +1,4 @@
-# Copyright (c) 2026 Huawei Technologies Co., Ltd.
+﻿# Copyright (c) 2026 Huawei Technologies Co., Ltd.
 # All Rights Reserved.
 #
 # SPDX-License-Identifier: Apache-2.0
@@ -49,7 +49,7 @@ from orchestrate.core.intent_psop_generator import IntentPsopGenerator
 from orchestrate.core.model.preflow import PreFlow
 from orchestrate.core.model.psop import PSOP
 from orchestrate.core.psop_generator import PsopGenerator
-from orchestrate.server.shared_handlers import SharedHandlers
+from orchestrate.core.shared_handlers import SharedHandlers
 from orchestrate.server.sse_executor import dispatch_intent_sse
 from orchestrate.server.response_utils import ok, created, get_agent_cards
 from orchestrate.server.middleware import RateLimiter

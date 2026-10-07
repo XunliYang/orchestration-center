@@ -1,4 +1,4 @@
-# Copyright (c) 2026 Huawei Technologies Co., Ltd.
+﻿# Copyright (c) 2026 Huawei Technologies Co., Ltd.
 # All Rights Reserved.
 #
 # SPDX-License-Identifier: Apache-2.0
@@ -10,7 +10,7 @@ import pytest
 from workflow_engine import A2AStreamEvent
 
 from orchestrate.runtime.exec_engine import OrchestrationEngine
-from orchestrate.server.shared_handlers import SharedHandlers
+from orchestrate.core.shared_handlers import SharedHandlers
 
 
 class _EmptyRetrieval:

@@ -37,6 +37,7 @@ from starlette import status
 from starlette.responses import JSONResponse, Response
 
 from common.util.config_util import get_conf
+from common.util.persistence_mode import is_db_mode
 from orchestrate.server.response_utils import ok, error
 
 # Endpoints that must remain public even when auth is enabled.
@@ -110,7 +111,7 @@ def is_auth_enabled() -> bool:
         return False
 
     conf = get_conf()
-    if conf.get("persistence_mode", "file").lower() == "postgresql":
+    if is_db_mode(conf):
         from database.utils.user_store import has_any_user
         return has_any_user()
     # File mode: config-based auth

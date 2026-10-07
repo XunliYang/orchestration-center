@@ -29,6 +29,7 @@ from loguru import logger
 
 from common.custom import HandlerRegistry, InterfaceType
 from host_agent.service import start_agent_server
+import orchestrate.handlers  # noqa: F401  - registers the bundled storage handlers
 from orchestrate import AgentCardLoader
 from orchestrate.registry_client.client_factory import AgentRegistryClientFactory
 from orchestrate.workflow_storage_instance import get_workflow_storage
@@ -115,8 +116,8 @@ async def register_or_update_agent(factory, agent_card: AgentCard) -> dict:
 
 
 def pre_insert_psop():
-    from common.util.config_util import get_conf
-    if get_conf().get("persistence_mode", "file").lower() == "file":
+    from common.util.persistence_mode import is_db_mode
+    if not is_db_mode():
         logger.info("Persistence mode is file, skipping pre_insert_psop")
         return
 

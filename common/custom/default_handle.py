@@ -15,15 +15,21 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+"""Pluggable-handler mechanism: BaseHandler contract and the HandlerRegistry.
+
+This module holds the *mechanism* only. Business implementations live outside
+``common/``: the file-mode defaults and the database-backed handlers are
+registered by ``orchestrate/handlers/__init__.py``; third parties can register
+additional overrides the same way (:meth:`HandlerRegistry.register`).
+"""
+
 from abc import ABC, abstractmethod
 from typing import Dict, Type
 
 from loguru import logger
 
 from common.custom.interface_type import InterfaceType
-from common.util.config_util import get_conf
-from orchestrate.core.workflow_search_result import WorkflowSearchResult
-from orchestrate.workflow_storage_instance import get_workflow_storage
+from common.util.persistence_mode import is_db_mode, persistence_mode
 
 
 class BaseHandler(ABC):
@@ -35,105 +41,62 @@ class BaseHandler(ABC):
         pass
 
 
-# ==================== Default implementations ====================
-class SavePsopHandler(BaseHandler):
-    def handle(self, *args, **kwargs):
-        return get_workflow_storage().save_psop(*args)
-
-
-class GetAllPsopsHandler(BaseHandler):
-    def handle(self, *args, **kwargs):
-        results = []
-        storage = get_workflow_storage()
-        for wf_id in storage.list_psops():
-            psop = storage.load_psop(wf_id)
-            if psop:
-                results.append(WorkflowSearchResult(
-                    workflow_id=psop.id,
-                    workflow_type="psop",
-                    name=psop.name,
-                    description=psop.description,
-                    tags=psop.tags,
-                    created_at=psop.created_at,
-                    user_intent=psop.user_intent,
-                    related_preflow=psop.related_preflow,
-                ))
-        return results
-
-
-class GetPsopHandler(BaseHandler):
-    def handle(self, *args, **kwargs):
-        storage = get_workflow_storage()
-        return storage.load_psop(*args)
-
-
-class DeletePsopHandler(BaseHandler):
-    def handle(self, *args, **kwargs):
-        return get_workflow_storage().delete_psop(*args)
-
-
-# ==================== Execution Record default handlers ====================
-class SaveExecutionRecordHandler(BaseHandler):
-    def handle(self, *args, **kwargs):
-        return get_workflow_storage().save_execution_record(*args)
-
-
-class ListExecutionRecordsHandler(BaseHandler):
-    def handle(self, *args, **kwargs):
-        return get_workflow_storage().list_execution_records()
-
-
-class GetExecutionRecordHandler(BaseHandler):
-    def handle(self, *args, **kwargs):
-        return get_workflow_storage().load_execution_record(*args)
-
-
-class DeleteExecutionRecordHandler(BaseHandler):
-    def handle(self, *args, **kwargs):
-        return get_workflow_storage().delete_execution_record(*args)
-
-
-# ==================== Registry ====================
 class HandlerRegistry:
-    _registry: Dict[str, Type[BaseHandler]] = {}
+    """Dispatch table from an :class:`InterfaceType` to a handler class.
+
+    Two slots exist per interface type:
+
+    - *defaults* (file mode): the JSON-storage implementations, registered
+      with :meth:`register_default`;
+    - *overrides* (database mode): implementations registered with
+      :meth:`register`, which replace the defaults whenever
+      ``persistence_mode`` selects a database-backed mode.
+
+    Dispatch intentionally fails loudly in database mode when no override is
+    registered: silently falling back to file storage would scatter workflow
+    data across two backends.
+    """
+
+    _defaults: Dict[str, Type[BaseHandler]] = {}
+    _overrides: Dict[str, Type[BaseHandler]] = {}
+
+    @classmethod
+    def register_default(cls, interface_type: InterfaceType, handler_class: Type[BaseHandler]) -> None:
+        """Register the file-mode implementation for an interface type."""
+        cls._register_into(cls._defaults, interface_type, handler_class, slot="default")
 
     @classmethod
     def register(cls, interface_type: InterfaceType, handler_class: Type[BaseHandler]) -> None:
         """
-        Register a user-customized implementation class.
-        :param interface_type: Interface type identifier, e.g., "decrypt", "audit", "authenticate", "insert", "query"
+        Register a database-mode (or third-party) implementation class.
+
+        :param interface_type: Interface type identifier, e.g. ``SAVE_PSOP``
         :param handler_class: Custom class inheriting from BaseHandler
         """
+        cls._register_into(cls._overrides, interface_type, handler_class, slot="override")
+
+    @classmethod
+    def _register_into(cls, slot_map: Dict[str, Type[BaseHandler]], interface_type: InterfaceType,
+                       handler_class: Type[BaseHandler], slot: str) -> None:
         if not issubclass(handler_class, BaseHandler):
             raise TypeError("handler_class must be a subclass of BaseHandler")
-        cls._registry[interface_type.value] = handler_class
+        slot_map[interface_type.value] = handler_class
 
     @classmethod
     def get_handler(cls, interface_type: InterfaceType) -> BaseHandler:
-        persistence_mode = get_conf().get("persistence_mode", "file")
-        if persistence_mode.lower() != "file":
-            if interface_type.value in cls._registry:
-                logger.debug(f"[Registry] Dispatching '{interface_type.value}' → DB handler (mode={persistence_mode})")
-                return cls._registry[interface_type.value]()
-            else:
+        """Instantiate the handler matching the configured persistence mode."""
+        if is_db_mode():
+            handler_class = cls._overrides.get(interface_type.value)
+            if handler_class is None:
                 raise ValueError(
                     f"No custom handler registered for '{interface_type.value}' "
-                    f"but persistence_mode={persistence_mode}. "
+                    f"but persistence_mode={persistence_mode()}. "
                     "Register a handler via HandlerRegistry.register() first."
                 )
-        logger.debug(f"[Registry] Dispatching '{interface_type.value}' → file handler (mode={persistence_mode})")
-        default_map = {
-            "save_psop": SavePsopHandler,
-            "get_all_psop": GetAllPsopsHandler,
-            "get_psop_by_id": GetPsopHandler,
-            "delete_psop": DeletePsopHandler,
-            "save_execution_record": SaveExecutionRecordHandler,
-            "list_execution_records": ListExecutionRecordsHandler,
-            "get_execution_record": GetExecutionRecordHandler,
-            "delete_execution_record": DeleteExecutionRecordHandler,
-        }
-        handler_class = default_map.get(interface_type.value)
+            logger.debug(f"[Registry] Dispatching '{interface_type.value}' → DB handler (mode={persistence_mode()})")
+            return handler_class()
+        handler_class = cls._defaults.get(interface_type.value)
         if handler_class is None:
             raise ValueError(f"Unknown interface type: {interface_type}")
+        logger.debug(f"[Registry] Dispatching '{interface_type.value}' → file handler (mode={persistence_mode()})")
         return handler_class()
-

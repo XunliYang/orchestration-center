@@ -1,4 +1,4 @@
-# Copyright (c) 2026 Huawei Technologies Co., Ltd.
+﻿# Copyright (c) 2026 Huawei Technologies Co., Ltd.
 # All Rights Reserved.
 #
 # SPDX-License-Identifier: Apache-2.0
@@ -128,7 +128,7 @@ class TestListPsopSummaries:
         psop = _make_psop("p1", "WF1", tags=["a", "b"])
         storage = _make_storage([psop])
         retrieval = WorkflowRetrieval(storage)
-        with patch("orchestrate.core.retrieval.get_conf") as mock_conf:
+        with patch("orchestrate.core.retrieval.is_db_mode") as mock_conf:
             mock_conf.return_value = {"persistence_mode": "file"}
             retrieval._db_mode = False
             results = retrieval._list_psop_summaries()
@@ -158,7 +158,7 @@ class TestRetrieveNamesByIntent:
         psop = _make_psop("p1", "WF1")
         storage = _make_storage([psop])
         retrieval = WorkflowRetrieval(storage)
-        with patch("orchestrate.core.retrieval.get_conf") as mock_conf:
+        with patch("orchestrate.core.retrieval.is_db_mode") as mock_conf:
             mock_conf.return_value = {"persistence_mode": "file"}
             retrieval._db_mode = False
             with patch("orchestrate.core.retrieval.get_llm_instance") as mock_llm_fn, \
@@ -182,7 +182,7 @@ class TestRetrieveNamesByIntent:
         psop = _make_psop("p1", "WF1")
         storage = _make_storage([psop])
         retrieval = WorkflowRetrieval(storage)
-        with patch("orchestrate.core.retrieval.get_conf") as mock_conf:
+        with patch("orchestrate.core.retrieval.is_db_mode") as mock_conf:
             mock_conf.return_value = {"persistence_mode": "file"}
             retrieval._db_mode = False
             with patch("orchestrate.core.retrieval.get_llm_instance") as mock_llm_fn, \
@@ -199,7 +199,7 @@ class TestRetrieveNamesByIntent:
         psop = _make_psop("p1", "WF1")
         storage = _make_storage([psop])
         retrieval = WorkflowRetrieval(storage)
-        with patch("orchestrate.core.retrieval.get_conf") as mock_conf:
+        with patch("orchestrate.core.retrieval.is_db_mode") as mock_conf:
             mock_conf.return_value = {"persistence_mode": "file"}
             retrieval._db_mode = False
             with patch("orchestrate.core.retrieval.get_llm_instance") as mock_llm_fn, \
@@ -223,7 +223,7 @@ class TestRetrievePsopByIntent:
         psop = _make_psop("p1", "WF1")
         storage = _make_storage([psop])
         retrieval = WorkflowRetrieval(storage)
-        with patch("orchestrate.core.retrieval.get_conf") as mock_conf:
+        with patch("orchestrate.core.retrieval.is_db_mode") as mock_conf:
             mock_conf.return_value = {"persistence_mode": "file"}
             retrieval._db_mode = False
             with patch.object(retrieval, "_retrieve_names_by_intent", return_value=["WF1"]):
@@ -234,7 +234,7 @@ class TestRetrievePsopByIntent:
         psop = _make_psop("p1", "WF1")
         storage = _make_storage([psop])
         retrieval = WorkflowRetrieval(storage)
-        with patch("orchestrate.core.retrieval.get_conf") as mock_conf:
+        with patch("orchestrate.core.retrieval.is_db_mode") as mock_conf:
             mock_conf.return_value = {"persistence_mode": "file"}
             retrieval._db_mode = False
             with patch.object(retrieval, "_retrieve_names_by_intent", return_value=[]):
@@ -245,7 +245,7 @@ class TestRetrievePsopByIntent:
         psop = _make_psop("p1", "WF1")
         storage = _make_storage([psop])
         retrieval = WorkflowRetrieval(storage)
-        with patch("orchestrate.core.retrieval.get_conf") as mock_conf:
+        with patch("orchestrate.core.retrieval.is_db_mode") as mock_conf:
             mock_conf.return_value = {"persistence_mode": "file"}
             retrieval._db_mode = False
             with patch.object(retrieval, "_retrieve_names_by_intent", return_value=["NonExistentName"]):
@@ -270,7 +270,7 @@ class TestRetrievePsopByIntentTopN:
         psop2 = _make_psop("p2", "WF2")
         storage = _make_storage([psop1, psop2])
         retrieval = WorkflowRetrieval(storage)
-        with patch("orchestrate.core.retrieval.get_conf") as mock_conf:
+        with patch("orchestrate.core.retrieval.is_db_mode") as mock_conf:
             mock_conf.return_value = {"persistence_mode": "file"}
             retrieval._db_mode = False
             with patch.object(retrieval, "_retrieve_names_by_intent", return_value=["WF1", "WF2"]):
@@ -282,7 +282,7 @@ class TestRetrievePsopByIntentTopN:
         psop1 = _make_psop("p1", "WF1")
         storage = _make_storage([psop1])
         retrieval = WorkflowRetrieval(storage)
-        with patch("orchestrate.core.retrieval.get_conf") as mock_conf:
+        with patch("orchestrate.core.retrieval.is_db_mode") as mock_conf:
             mock_conf.return_value = {"persistence_mode": "file"}
             retrieval._db_mode = False
             with patch.object(retrieval, "_retrieve_names_by_intent", return_value=["WF1", "NonExistent"]):
@@ -293,7 +293,7 @@ class TestRetrievePsopByIntentTopN:
         psops = [_make_psop(f"p{i}", f"WF{i}") for i in range(10)]
         storage = _make_storage(psops)
         retrieval = WorkflowRetrieval(storage)
-        with patch("orchestrate.core.retrieval.get_conf") as mock_conf:
+        with patch("orchestrate.core.retrieval.is_db_mode") as mock_conf:
             mock_conf.return_value = {"persistence_mode": "file"}
             retrieval._db_mode = False
             names = [f"WF{i}" for i in range(10)]
@@ -319,7 +319,7 @@ class TestSearchByName:
         psop2 = _make_psop("p2", "TranslateWF")
         storage = _make_storage([psop1, psop2])
         retrieval = WorkflowRetrieval(storage)
-        with patch("orchestrate.core.retrieval.get_conf") as mock_conf:
+        with patch("orchestrate.core.retrieval.is_db_mode") as mock_conf:
             mock_conf.return_value = {"persistence_mode": "file"}
             retrieval._db_mode = False
             results = retrieval.search_by_name("summarize")
@@ -330,7 +330,7 @@ class TestSearchByName:
         psop1 = _make_psop("p1", "WF1")
         storage = _make_storage([psop1])
         retrieval = WorkflowRetrieval(storage)
-        with patch("orchestrate.core.retrieval.get_conf") as mock_conf:
+        with patch("orchestrate.core.retrieval.is_db_mode") as mock_conf:
             mock_conf.return_value = {"persistence_mode": "file"}
             retrieval._db_mode = False
             results = retrieval.search_by_name("nonexistent")

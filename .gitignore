@@ -4,7 +4,7 @@ __pycache__/
 .idea/
 venv/
 .venv/
-log/
+/log/
 .pytest_cache/
 .pytest-tmp/
 .coverage
@@ -13,7 +13,16 @@ htmlcov/
 openspec/
 workflow-designer/dist/
 workflow-designer/stats.html
-data/
+# Runtime data is never committed; the two demo seed locations below are
+# deliberately tracked (workflow templates served by the /templates endpoints,
+# and the pre-seeded SPN demo workflow so fresh clones can run the demo).
+data/*
+!data/workflow_templates/
+!data/workflow_storage/
+data/workflow_storage/*
+!data/workflow_storage/psop/
+data/workflow_storage/psop/*
+!data/workflow_storage/psop/psop_spn_cross_city_diagnosis.json
 etc/conf/task_prompt_stubs.json
 .env
 common/config/llm_config.json

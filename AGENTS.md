@@ -98,7 +98,7 @@ Agent authentication (Bearer token obtained via a login endpoint, custom auth he
 
 | File | Role |
 |---|---|
-| `samples/agent_credentials.json` | Sample-only per-agent credentials (`login_url`, method, request fields, token field), passed to `A2ATransport(credentials_config=...)`; real deployments should inject an external protected path |
+| `samples/agent_credentials.json` | Sample-only per-agent credentials (`login_url`, method, request fields, token field), passed to `A2ATransport(credentials_config=...)`. Ships with localhost demo factory defaults; for real deployments inject an external protected file via `ORCH_AGENT_CREDENTIALS_FILE` (or the `agent_credentials_file` config key), or store `enc:`-encrypted values decrypted with `A2AT_CRED_KEY` |
 
 Agents without `securitySchemes` in their AgentCard are unaffected.
 
@@ -149,7 +149,7 @@ data/workflow_storage/ # File-based persistence (PSOP, PreFlow, execution record
 - **Frontend is JS/JSX, not TypeScript**.
 - **All Python code is run as modules** (`python -m`, not `python file.py`). Imports use absolute paths rooted at repo root.
 - **Sample agents must be running** for workflow execution to succeed (they provide the actual A2A agent endpoints).
-- **Workflow designer expects backend at `http://127.0.0.1:5001`** (hardcoded in `workflow-designer/src/service/api.js`).
+- **Workflow designer defaults to backend at `http://127.0.0.1:5001`** (committed default in `workflow-designer/src/service/api.js`; runtime override is stored in localStorage under `server_config`).
 - **CI/CD** configured in `.github/workflows/ci.yml` — runs pytest and ESLint (frontend).
 - **License headers required** on all source files (Apache 2.0, Huawei copyright).
 
@@ -166,9 +166,10 @@ data/workflow_storage/ # File-based persistence (PSOP, PreFlow, execution record
 - Never write a PAT, token, or password into any tracked file (including this one). Use the keyring, the `git` SSH remote, or an untracked/gitignored file (e.g. `.env`, `*.token.md`).
 
 **Local-only files (do NOT commit):**
-- `workflow-designer/src/service/api.js` — Contains local debug configuration (API endpoint). Keep local modifications for development, do not include in commits.
 - `etc/conf/server.conf` — Local server configuration. Revert any local changes before committing.
 - `etc/conf/db_config.json` — Local PostgreSQL connection settings, including credentials. Gitignored; copy `etc/conf/db_config.json.template` to get started, and never commit the real file.
+
+Note: `workflow-designer/src/service/api.js` is a tracked module (CI runs its tests). Its committed content is the generic default endpoint; developers who point it at a private backend during debugging must revert those local edits before committing.
 
 ## Key commands reference
 

@@ -1,4 +1,4 @@
-# Copyright (c) 2026 Huawei Technologies Co., Ltd.
+﻿# Copyright (c) 2026 Huawei Technologies Co., Ltd.
 # All Rights Reserved.
 #
 # SPDX-License-Identifier: Apache-2.0
@@ -91,7 +91,7 @@ def test_psops_requires_token_when_auth_enabled(client):
 def test_psops_allows_valid_session_when_auth_enabled(client):
     token, _ = get_session_store().create("u1", "user")
     with patch("orchestrate.server.auth.is_auth_enabled", return_value=True), \
-         patch("orchestrate.server.shared_handlers.SharedHandlers.retrieval") as retrieval:
+         patch("orchestrate.core.shared_handlers.SharedHandlers.retrieval") as retrieval:
         retrieval.return_value.list_recent_workflows.return_value = []
         resp = client.get("/psops", cookies={"session_token": token})
         assert resp.status_code == 200
@@ -99,7 +99,7 @@ def test_psops_allows_valid_session_when_auth_enabled(client):
 
 def test_psops_open_when_auth_disabled(client):
     # TESTING=True 时 is_auth_enabled 为 False,与既有行为一致
-    with patch("orchestrate.server.shared_handlers.SharedHandlers.retrieval") as retrieval:
+    with patch("orchestrate.core.shared_handlers.SharedHandlers.retrieval") as retrieval:
         retrieval.return_value.list_recent_workflows.return_value = []
         resp = client.get("/psops")
         assert resp.status_code == 200
