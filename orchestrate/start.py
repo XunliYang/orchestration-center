@@ -34,6 +34,7 @@ from common.util.persistence_mode import is_db_mode, validate_storage_mode
 from database.utils.table_creation import create_tables
 from database.utils.user_store import seed_admin_if_empty
 from orchestrate.server.frontend_support_server import app
+from orchestrate.server.security_preflight import SecurityPreflightError, security_preflight
 
 def customized_create_ssl_context(certfile: str | os.PathLike[str],
                                   keyfile: str | os.PathLike[str] | None,
@@ -159,6 +160,26 @@ def main():
     is_https = server_config.get("enable_https", True)
     is_enable_https = str(is_https).lower() == 'true'
     validate_storage_mode()
+    try:
+        preflight = security_preflight(server_config)
+    except SecurityPreflightError as e:
+        logger.error(str(e))
+        sys.exit(str(e))
+    for message in preflight.warnings:
+        logger.warning(message)
+    if preflight.dev_insecure_mode:
+        audit_logger.audit({
+            'object_name': OperationObject.SERVER,
+            'operation_name': OperationName.START_SERVER,
+            'level': LogLevel.DANGER,
+            'result': OperationResult.SUCCESS,
+            'details': {
+                "ip": server_config.get('ip', ""),
+                "port": server_config.get('port', ""),
+                "dev_insecure_mode": True,
+            },
+            'user_name': get_user_info_from_env().get('username'),
+        })
     if is_db_mode():
         create_tables()
         # Seed default admin user if users table is empty. user_store now

@@ -54,6 +54,7 @@ from common.custom.interface_type import InterfaceType
 import orchestrate.handlers  # noqa: F401  - registers the bundled storage handlers
 from orchestrate.server.sse_executor import dispatch_intent_sse
 from orchestrate.server.response_utils import ok, created, error, get_agent_cards
+from orchestrate.server.security_preflight import dev_insecure_mode_enabled
 from orchestrate.registry_client.client_factory import AgentRegistryClientFactory
 from orchestrate.agentcard_loader import _normalize_agent_dict
 from common.log.audit_logger import audit_logger, OperationObject, OperationName, LogLevel, OperationResult
@@ -1249,6 +1250,23 @@ async def get_execution_record(execution_id: str):
 app.include_router(router)
 app.include_router(external_router)
 app.include_router(sandbox_router, prefix="/rest/v1/orchestrate")
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Health
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@app.get("/health")
+async def health():
+    """Public liveness probe, and the operator-visible startup-check flag.
+
+    Deliberately unauthenticated (auth_middleware covers /rest/v1/orchestrate and
+    /psops only) and deliberately tiny: it echoes whether
+    security.dev_insecure_mode=true is in effect, so an instance intentionally
+    started without a credential is visible from outside rather than only in its
+    own log. No version, configuration or build metadata is exposed.
+    """
+    return {"status": "ok", "dev_insecure_mode": dev_insecure_mode_enabled(get_conf())}
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Legacy route aliases (backward compatibility, delegates to new routes)
