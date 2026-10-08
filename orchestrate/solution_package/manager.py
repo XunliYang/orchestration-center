@@ -45,16 +45,24 @@ class SolutionPackageManager:
         self.seed_dir = project_root / "samples" / "solution_packages"
 
         self.storage_dir.mkdir(parents=True, exist_ok=True)
-        self._seed_demo_packages()
+        if storage_dir is None:
+            # Seeding belongs to the default deployment directory. A caller that
+            # passes its own directory (tests, custom deployments) gets exactly
+            # the contents it manages itself.
+            self._seed_demo_packages()
         logger.info(f"SolutionPackageManager initialized with storage directory: {self.storage_dir}")
 
     def _seed_demo_packages(self) -> None:
-        """Copy demo packages from samples/ into an empty storage directory.
+        """Copy the demo packages shipped in samples/solution_packages/ into an
+        empty storage directory.
 
         Gives a fresh deployment a package to explore without needing the
         original PDF. Real imports never get overwritten: seeding is skipped
-        as soon as the storage directory holds any package.
+        as soon as the storage directory holds any package. Test runs never
+        seed, so importing the application cannot write into the working tree.
         """
+        if os.environ.get("TESTING", "").lower() in ("true", "1", "yes"):
+            return
         if any(self.storage_dir.glob("*.json")):
             return
         if not self.seed_dir.is_dir():
