@@ -35,7 +35,5 @@ PROFILES = {
 def load_connection_config(mode, root=None):
     if mode not in PROFILES:
         raise ValueError("Unsupported SQL connection profile")
-    old = "db_config.json" if mode == "postgresql" else "mysql_config.json"
-    return load_profile(mode, PROFILES[mode], root or get_root_path(),
-                        previous_locations=("etc/conf/" + old,))
+    return load_profile(mode, PROFILES[mode], root or get_root_path())
 
