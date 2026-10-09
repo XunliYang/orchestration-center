@@ -34,6 +34,10 @@ def execute_query(conn, query, params=None):
             return None, None
     except Exception as error:
         logger.error(f"DB error: {error}")
+        try:
+            conn.rollback()
+        except Exception:
+            logger.warning("Database rollback failed; connection will be closed by the caller")
         return None, error
     finally:
         cur.close()

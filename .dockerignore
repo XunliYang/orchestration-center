@@ -21,6 +21,8 @@ docs/
 !README.md
 .env
 .env.*
+etc/conf/db_config.json
+etc/conf/mysql_config.json
 common/config/models.yaml
 workflow-designer/node_modules/
 workflow-designer/dist/

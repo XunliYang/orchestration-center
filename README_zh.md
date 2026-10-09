@@ -92,7 +92,7 @@ sequenceDiagram
         User->>FE: 点击保存
         FE->>+BE: POST /rest/v1/orchestrate/workflows<br/>{psop: {...}}
         BE->>BE: 校验 PSOP（Pydantic）
-        BE->>BE: 持久化（File JSON / PostgreSQL）
+        BE->>BE: 持久化（File JSON / PostgreSQL / MySQL）
         BE-->>-FE: {workflow_id: "..."}
         FE-->>User: 保存成功
     end
@@ -141,9 +141,11 @@ sequenceDiagram
 | **语义检索** | 基于自然语言意图检索历史工作流，快速复用已有流程 |
 | **双 API 层** | 内部 API（`/rest/v1/orchestrate/*`）供前端调用 + 对外 API（`/api/v1/*`）供第三方集成 |
 | **SSE 流式推送** | 11 种事件类型（init、start、agent_request、agent_response、psop_update、negotiation_request、negotiation_resolved、negotiation_failed、complete、error、close）实时推送执行进度 |
-| **可插拔存储** | 文件 JSON 或 PostgreSQL 持久化，通过 HandlerRegistry 切换 |
+| **可插拔存储** | 文件 JSON、PostgreSQL 或 MySQL 持久化，通过 HandlerRegistry 切换 |
 | **模板市场** | 预置电信场景工作流模板（直播保障、节能、故障处理） |
 | **示例 Agent** | 3 个示例 A2A Agent（Host Agent + 两个 SPN 域 Agent），用于测试和演示 |
+
+MySQL 配置、存储边界与容器启动步骤见 [MySQL 持久化配置](docs/zh/MySQL持久化配置.md)。
 
 ## 快速开始
 
@@ -276,10 +278,11 @@ flowchart TB
 
 内部 API（`/rest/v1/orchestrate/*`）受令牌认证保护。根据 `persistence_mode` 支持两种模式：
 
-**数据库模式（`persistence_mode=postgresql`）**：
-- 明文密码发送到后端（需经由 TLS，见下文），由后端使用 SHA-256 + 每用户独立 salt 哈希；服务器不再持久化或比对由客户端计算出的哈希值。
+**数据库模式（`persistence_mode=postgresql` 或 `mysql`）**：
+
+- 明文密码通过 TLS 发送到后端，使用版本化 bcrypt 哈希保存；旧哈希在成功登录后升级。
 - 首次启动自动创建默认 `admin` 用户（密码：`OpenAN@2026`）。
-- 新用户可通过登录页的注册链接自行注册。
+- 自助注册默认关闭；显式设置 `auth.register.enabled=true` 后才可注册。
 - 密码要求至少 8 位，且至少包含以下两类字符：数字、大写字母、小写字母、特殊字符。该策略在服务端强制校验（`common/util/password_util.validate_password_complexity`），而不仅仅是前端界面提示。
 
 **文件模式（`persistence_mode=file`）**：
@@ -291,7 +294,7 @@ flowchart TB
 |--------|------|--------|
 | `access_password` | 登录密码的 SHA-256 哈希值（仅 file 模式）。留空则禁用认证。 | 空（禁用） |
 | `access_token_ttl` | 会话令牌有效期（秒）。 | `43200`（12小时） |
-| `persistence_mode` | `postgresql` 启用数据库用户管理；`file` 使用配置密码认证。 | `file` |
+| `persistence_mode` | `postgresql` 或 `mysql` 启用数据库用户管理；`file` 使用配置密码认证。 | `file` |
 
 前端按原样发送密码；由后端负责哈希（数据库模式下按用户加盐哈希；文件模式下与配置的 SHA-256 值比对）。**这依赖 `enable_https=true` 来保证传输过程的机密性**——见下方 TLS/HTTPS 一节；除本地开发外，不要使用默认的 `enable_https=false`。会话令牌以 `Secure`（当 `enable_https=true` 时）、`HttpOnly`、`SameSite=Lax` 的 Cookie 形式在登录时下发——JavaScript 无法读取它（缓解 XSS 窃取令牌的风险），浏览器会自动携带它，包括在 `EventSource`/SSE 连接上，因此它不会出现在 URL 或作为查询参数被记录到日志中。为非浏览器客户端（curl、脚本）保留了 `Authorization: Bearer <token>` 作为后备方式。
 
@@ -369,10 +372,10 @@ SAN 必须与客户端 URL 的主机匹配，IP 必须使用 `--ip`，仅设置 
 | 方法 | 端点 | 说明 |
 |------|------|------|
 | `POST` | `/rest/v1/orchestrate/auth/login` | 使用用户名 + 密码登录，设置会话 Cookie |
-| `POST` | `/rest/v1/orchestrate/auth/register` | 注册新用户（仅 PostgreSQL 模式） |
+| `POST` | `/rest/v1/orchestrate/auth/register` | 注册新用户（仅 PostgreSQL/MySQL 模式） |
 | `POST` | `/rest/v1/orchestrate/auth/logout` | 撤销会话令牌并清除其 Cookie |
 | `GET` | `/rest/v1/orchestrate/auth/check` | 检查认证状态、令牌有效性及注册可用性 |
-| `GET` | `/rest/v1/orchestrate/auth/users` | 列出所有用户（仅 PostgreSQL 模式） |
+| `GET` | `/rest/v1/orchestrate/auth/users` | 列出所有用户（仅 PostgreSQL/MySQL 模式） |
 | `DELETE` | `/rest/v1/orchestrate/auth/users/{username}` | 删除用户（admin 不可删除） |
 
 
@@ -383,6 +386,7 @@ SAN 必须与客户端 URL 的主机匹配，IP 必须使用 `--ip`，仅设置 
 | `etc/conf/server.conf` | 服务 IP、端口、TLS 证书、持久化模式、注册中心 URL, access password, client_verify_server |
 | `etc/conf/server.properties` | TLS 密码套件、流控参数、连接限制 |
 | `etc/conf/db_config.json` | PostgreSQL 连接配置——已加入 .gitignore；复制 `etc/conf/db_config.json.template` 作为起点（仅 `persistence_mode=postgresql` 时需要） |
+| `etc/conf/mysql_config.json` | MySQL 连接配置——已加入 .gitignore；复制其 `.template`，通过 `MYSQL_PASSWORD` 注入密码，或全部使用环境变量；见 [MySQL 持久化配置](docs/zh/MySQL持久化配置.md) |
 | `.env` | 本地密钥 — 已加入 gitignore；模型定义见 `etc/config/models.yaml`。协商 SDK 也直接从这里读取 `A2AT_*` 变量（见下文） |
 | `etc/config/README_zh.md` | LLM 配置指南 |
 

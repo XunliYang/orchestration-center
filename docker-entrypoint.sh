@@ -81,8 +81,10 @@ if [ -n "${DB_HOST}" ] || [ -n "${DB_PORT}" ] || [ -n "${DB_NAME}" ] || [ -n "${
     python3 -c "
 import json, os
 path = '${DB_CONF}'
-with open(path, 'r') as f:
-    cfg = json.load(f)
+cfg = {}
+if os.path.isfile(path):
+    with open(path, 'r') as f:
+        cfg = json.load(f)
 if os.environ.get('DB_HOST'):     cfg['host']     = os.environ['DB_HOST']
 if os.environ.get('DB_PORT'):     cfg['port']     = os.environ['DB_PORT']
 if os.environ.get('DB_NAME'):     cfg['database'] = os.environ['DB_NAME']

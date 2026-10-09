@@ -21,15 +21,15 @@ from loguru import logger
 
 from database.utils.db_connection import create_connection
 from database.utils.query_execution import execute_query
+from database.utils.sql_dialect import upsert_sql, timestamp_parameter, timestamp_iso
 from orchestrate.core.model.execution_record import ExecutionRecord
 
 
 def db_save_execution_record(record: ExecutionRecord) -> str:
-    save_sql = """
-               INSERT INTO execution_records
-                   (execution_id, psop_id, psop_name, started_at, completed_at, status, step_count, record_content)
-               VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-               """
+    save_sql = upsert_sql("execution_records", "execution_id", (
+        "execution_id", "psop_id", "psop_name", "started_at", "completed_at",
+        "status", "step_count", "record_content",
+    ))
     conn = create_connection()
     if conn is None:
         raise RuntimeError("Unable to connect to database")
@@ -38,8 +38,8 @@ def db_save_execution_record(record: ExecutionRecord) -> str:
             record.execution_id,
             record.psop_id,
             record.psop_name,
-            record.started_at,
-            record.completed_at,
+            timestamp_parameter(record.started_at),
+            timestamp_parameter(record.completed_at),
             record.status,
             len(record.execution_history),
             record.model_dump_json(),
@@ -73,8 +73,8 @@ def db_list_execution_records():
                 "execution_id": row[0],
                 "psop_id": row[1],
                 "psop_name": row[2],
-                "started_at": row[3].isoformat() if hasattr(row[3], 'isoformat') else row[3],
-                "completed_at": row[4].isoformat() if hasattr(row[4], 'isoformat') else row[4],
+                "started_at": timestamp_iso(row[3]),
+                "completed_at": timestamp_iso(row[4]),
                 "status": row[5],
                 "step_count": row[6],
                 "error": None,

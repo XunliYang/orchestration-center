@@ -15,10 +15,10 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-"""User management with PostgreSQL persistence.
+"""User management with PostgreSQL or MySQL persistence.
 
 Stores usernames and password hashes in the ``users`` table.
-Passwords are hashed with SHA-256 + per-user salt.
+New passwords use the versioned bcrypt scheme in common.util.password_hash.
 
 ``password`` parameters below take the real plaintext password (sent by
 the frontend over the wire, ideally under TLS). Rows created before #9
@@ -38,6 +38,7 @@ from loguru import logger
 from common.util.password_hash import PASSWORD_SCHEME, hash_password, verify_legacy_bcrypt, verify_password
 from database.utils.db_connection import create_connection
 from database.utils.query_execution import execute_query
+from database.utils.sql_dialect import null_safe_equal
 
 # has_any_user() gates is_auth_enabled() (orchestrate/server/auth.py),
 # which runs on every /rest/v1/orchestrate/* request -- an unpooled DB
@@ -138,7 +139,7 @@ def _upgrade_password_scheme(
             conn,
             "UPDATE users SET password_hash = %s, salt = %s, password_scheme = %s "
             "WHERE username = %s AND password_hash = %s AND salt = %s "
-            "AND password_scheme IS NOT DISTINCT FROM %s",
+            "AND " + null_safe_equal("password_scheme"),
             (password_hash, "", _CURRENT_PASSWORD_SCHEME, username, old_hash, old_salt, old_scheme),
         )
         if err:

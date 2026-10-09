@@ -26,6 +26,7 @@ from psycopg2 import sql
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 
 from common.util.config_util import get_root_path
+from common.util.persistence_mode import persistence_mode
 
 DATABASE_NAME_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,62}$")
 
@@ -100,6 +101,9 @@ def create_database_if_not_exists():
 
 def create_connection():
     try:
+        if persistence_mode() == "mysql":
+            from database.utils.mysql_connection import get_backend
+            return get_backend().connection()
         if not create_database_if_not_exists():
             return None
         conn_info = _ConnInfoHolder.get()
@@ -109,3 +113,9 @@ def create_connection():
     except Exception as e:
         logger.error(f"Unable to connect to database: {e}")
         return None
+
+
+def close_database():
+    """Release MySQL pool resources; PostgreSQL connections close per operation."""
+    from database.utils.mysql_connection import close_backend
+    close_backend()

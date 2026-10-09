@@ -18,7 +18,7 @@
 """Single source of truth for the ``persistence_mode`` configuration flag.
 
 ``persistence_mode`` selects the workflow-storage backend: ``file`` (default)
-keeps JSON documents under ``data/workflow_storage/``; ``postgresql`` switches
+keeps JSON documents under ``data/workflow_storage/``; ``postgresql`` or ``mysql`` switches
 the pluggable handlers to the database-backed implementations (and, for legacy
 consumers such as the user store, whether the database is available at all).
 
@@ -33,7 +33,7 @@ from common.util.config_util import get_conf
 DEFAULT_STORAGE_MODE = "file"
 
 #: Every persistence_mode value this service understands.
-KNOWN_STORAGE_MODES = frozenset({"file", "postgresql"})
+KNOWN_STORAGE_MODES = frozenset({"file", "postgresql", "mysql"})
 
 
 def persistence_mode() -> str:

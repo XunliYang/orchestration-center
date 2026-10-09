@@ -18,6 +18,8 @@ from common.util import persistence_mode as modes
     ({"persistence_mode": "FILE"}, "file", False),
     ({"persistence_mode": "postgresql"}, "postgresql", True),
     ({"persistence_mode": "PostgreSQL"}, "postgresql", True),
+    ({"persistence_mode": "mysql"}, "mysql", True),
+    ({"persistence_mode": "MySQL"}, "mysql", True),
 ])
 def test_supported_modes(monkeypatch, conf, expected, is_db):
     monkeypatch.setattr(modes, "get_conf", lambda: conf)

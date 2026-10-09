@@ -63,10 +63,10 @@ SPDX-License-Identifier: Apache-2.0
 
 The internal API (`/rest/v1/orchestrate/*`) supports optional token authentication with two modes:
 
-- **PostgreSQL mode**: Users are stored in the database with versioned password hashes. User management is available; self-registration is disabled by default and requires `auth.register.enabled=true`.
+- **Database mode (PostgreSQL/MySQL)**: Users are stored in the database with versioned password hashes. User management is available; self-registration is disabled by default and requires `auth.register.enabled=true`.
 - **File mode**: A single password is configured via `access_password` in `server.conf`. Username is `admin` only.
 
-Authentication is enabled when `access_password` is set (file mode) or when the `users` table has at least one user (PostgreSQL mode). When enabled, all internal API requests must include a valid token.
+Authentication is enabled when `access_password` is set (file mode) or when the `users` table has at least one user (PostgreSQL/MySQL mode). When enabled, all internal API requests must include a valid token.
 
 **Login:**
 ```bash
@@ -89,7 +89,7 @@ curl -H "Authorization: Bearer <token>" https://127.0.0.1:5001/rest/v1/orchestra
 SSE endpoints (`EventSource`) authenticate with the same session cookie, which the browser sends
 automatically. There is no query-parameter token.
 
-Registration (PostgreSQL mode with `auth.register.enabled=true` only):
+Registration (PostgreSQL/MySQL mode with `auth.register.enabled=true` only):
 ```bash
 curl -X POST https://127.0.0.1:5001/rest/v1/orchestrate/auth/register \
   -H "Content-Type: application/json" \

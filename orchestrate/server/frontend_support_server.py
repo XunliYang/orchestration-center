@@ -138,6 +138,8 @@ async def _cleanup_resources():
     """Clean up lingering async resources on shutdown."""
     logger.info("Cleaning up server resources...")
     await sandbox_service.aclose()
+    from database.utils.db_connection import close_database
+    close_database()
 
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException):
@@ -304,7 +306,7 @@ async def register(request: RegisterRequest):
     if not _registration_enabled(conf):
         raise HTTPException(status_code=403, detail="Self-registration is disabled")
     if not is_db_mode(conf):
-        raise HTTPException(status_code=400, detail="Registration requires PostgreSQL persistence mode")
+        raise HTTPException(status_code=400, detail="Registration requires database persistence mode")
     if not re.fullmatch(r"^[a-zA-Z][a-zA-Z0-9_-]{2,63}$", request.username):
         raise HTTPException(status_code=400, detail="Username must start with a letter and contain only letters, digits, underscores or hyphens (3-64 chars)")
     from common.util.password_util import validate_password_complexity
