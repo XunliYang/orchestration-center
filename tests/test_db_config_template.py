@@ -15,20 +15,14 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-"""Regression coverage for #24: etc/conf/db_config.json was committed with a
-live-looking PostgreSQL user/password and was not gitignored, so every local
-edit kept flowing into history. It's now gitignored, untracked, and replaced
-in git by a placeholder etc/conf/db_config.json.template that
-database/utils/db_connection.py's read_db_config()/_ConnInfoHolder consumers
-expect a real db_config.json to structurally match.
-"""
+"""PostgreSQL template and legacy-secret exclusion regression coverage."""
 
 import json
 import os
 import subprocess
 
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-_TEMPLATE_PATH = os.path.join(_REPO_ROOT, "etc", "conf", "db_config.json.template")
+_TEMPLATE_PATH = os.path.join(_REPO_ROOT, "etc", "conf", "db", "postgresql.json.template")
 
 
 class TestDbConfigTemplate:
@@ -40,13 +34,14 @@ class TestDbConfigTemplate:
     def test_template_has_the_keys_db_connection_expects(self):
         with open(_TEMPLATE_PATH, "r", encoding="utf-8") as f:
             config = json.load(f)
-        assert set(config.keys()) == {"host", "port", "database", "user", "password"}
+        assert set(config.keys()) == {"host", "port", "database", "user", "password_env", "connect_timeout"}
 
     def test_template_does_not_ship_a_real_looking_credential(self):
         with open(_TEMPLATE_PATH, "r", encoding="utf-8") as f:
             config = json.load(f)
         assert config["user"].startswith("<") and config["user"].endswith(">")
-        assert config["password"].startswith("<") and config["password"].endswith(">")
+        assert config["password_env"] == "POSTGRES_PASSWORD"
+        assert "password" not in config
 
 
 class TestDbConfigJsonIsNotTracked:

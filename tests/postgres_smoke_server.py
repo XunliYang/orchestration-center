@@ -25,6 +25,7 @@ from database.utils import db_connection
 # Bypass etc/conf/db_config.json: seed the parsed-config cache and re-arm the
 # one-shot database-existence check, exactly as the live tests do.
 db_connection._ConnInfoHolder._instance = json.loads(os.environ["OC_POSTGRES_SMOKE_CONFIG"])
+conf["connection_config"] = json.loads(os.environ["OC_POSTGRES_SMOKE_CONFIG"])
 db_connection._database_verified = False
 
 from database.utils.table_creation import create_tables

@@ -24,14 +24,14 @@ LONGTEXT，时间使用 DATETIME(6)，按 UTC 存取。MySQL 的 PSOP ID 上限�
 
 ## 配置与启动
 
-1. 将 `etc/conf/mysql_config.json.template` 复制为 `etc/conf/mysql_config.json`，设置地址、
+1. 将 `etc/conf/db/mysql.json.template` 复制为 `etc/conf/db/mysql.json`，设置地址、
    端口、库名和账号。真实配置已加入 Git 和 Docker 忽略规则。MySQL 模式不读取 PostgreSQL
-   的 `db_config.json`。
+   的 `db/postgresql.json`。
 2. 密码通过 `password_env` 指定的变量注入，默认 `MYSQL_PASSWORD`。支持进程环境和根目录
    `.env`，进程环境优先。`MYSQL_HOST`、`MYSQL_PORT`、`MYSQL_DATABASE`、`MYSQL_USER`、
    连接池、超时及 `MYSQL_SSL_CA` 也覆盖 JSON 配置；容器可全部使用环境变量，无需 JSON。
-   缺少密码变量会报错；显式设置为空才允许无密码的临时测试实例。受保护 JSON 中显式
-   `password` 兼容可用，但不推荐将密码落盘。
+   缺少密码变量会报错；显式设置为空才允许无密码的临时测试实例。
+   不再接受 JSON 中的明文或密文 `password`，只使用变量引用。
 3. 设置 `persistence_mode=mysql`，首次对外启动前先创建私有管理员密码，避免全新数据库
    在 HTTP 启动安全预检时没有用户可认证：
 
@@ -49,7 +49,7 @@ LONGTEXT，时间使用 DATETIME(6)，按 UTC 存取。MySQL 的 PSOP ID 上限�
 |---|---|---|
 | `host`、`port` | `MYSQL_HOST`、`MYSQL_PORT` | `127.0.0.1`、`3306` |
 | `database`、`user` | `MYSQL_DATABASE`、`MYSQL_USER` | `orchestration_center`；账号必须配置 |
-| `password_env` | 该字段指定的变量 | 默认 `MYSQL_PASSWORD`；未显式配置 `password` 时必须存在 |
+| `password_env` | 该字段指定的变量 | 默认 `MYSQL_PASSWORD`；变量必须存在（允许显式空值用于本地无密码数据库） |
 | `pool_min`、`pool_max` | `MYSQL_POOL_MIN`、`MYSQL_POOL_MAX` | 每进程 `1`、`20`；0 <= min <= max，max >= 1 |
 | `connect_timeout` | `MYSQL_CONNECT_TIMEOUT` | TCP 连接超时，默认 10 秒 |
 | `read_timeout`、`write_timeout` | `MYSQL_READ_TIMEOUT`、`MYSQL_WRITE_TIMEOUT` | 套接字读写超时，各 30 秒；不是 SQL 总耗时上限 |

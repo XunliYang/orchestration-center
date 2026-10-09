@@ -28,3 +28,5 @@ workflow-designer/node_modules/
 workflow-designer/dist/
 wheelhouse/
 wheels/
+.env.database-*
+etc/conf/db/*.json

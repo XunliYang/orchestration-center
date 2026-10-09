@@ -31,7 +31,6 @@ export PATH="/opt/venv/bin:$PATH"
 # ─────────────────────────────────────────────────────────────────────
 
 SERVER_CONF="etc/conf/server.conf"
-DB_CONF="etc/conf/db_config.json"
 MODELS_CONF="etc/config/models.yaml"
 A2AT_ENV=".env"
 
@@ -71,30 +70,13 @@ if [ "${ORCH_ENABLE_HTTPS}" = "false" ]; then
     echo "Config override: HTTPS disabled -> verify_client=false"
 fi
 
-# --- db_config.json overrides ---
+# --- Persistence selector (connections/secrets are read directly by Python) ---
 if [ -n "${PERSISTENCE_MODE}" ]; then
     sed -i "s#^persistence_mode=.*#persistence_mode=${PERSISTENCE_MODE}#" "${SERVER_CONF}"
     echo "Config override: persistence_mode=${PERSISTENCE_MODE}"
 fi
 
-if [ -n "${DB_HOST}" ] || [ -n "${DB_PORT}" ] || [ -n "${DB_NAME}" ] || [ -n "${DB_USERNAME}" ] || [ -n "${DB_PASSWORD}" ]; then
-    python3 -c "
-import json, os
-path = '${DB_CONF}'
-cfg = {}
-if os.path.isfile(path):
-    with open(path, 'r') as f:
-        cfg = json.load(f)
-if os.environ.get('DB_HOST'):     cfg['host']     = os.environ['DB_HOST']
-if os.environ.get('DB_PORT'):     cfg['port']     = os.environ['DB_PORT']
-if os.environ.get('DB_NAME'):     cfg['database'] = os.environ['DB_NAME']
-if os.environ.get('DB_USERNAME'): cfg['user']     = os.environ['DB_USERNAME']
-if os.environ.get('DB_PASSWORD'): cfg['password'] = os.environ['DB_PASSWORD']
-with open(path, 'w') as f:
-    json.dump(cfg, f, indent=2)
-"
-    echo "Config override: db_config.json updated from environment variables"
-fi
+# Connection environment variables never get materialized into files.
 
 # --- models.yaml generation (LLM model definitions) ---
 # models.yaml is local configuration and is not shipped in the image. A platform

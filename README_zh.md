@@ -385,8 +385,8 @@ SAN 必须与客户端 URL 的主机匹配，IP 必须使用 `--ip`，仅设置 
 |----------|------|
 | `etc/conf/server.conf` | 服务 IP、端口、TLS 证书、持久化模式、注册中心 URL, access password, client_verify_server |
 | `etc/conf/server.properties` | TLS 密码套件、流控参数、连接限制 |
-| `etc/conf/db_config.json` | PostgreSQL 连接配置——已加入 .gitignore；复制 `etc/conf/db_config.json.template` 作为起点（仅 `persistence_mode=postgresql` 时需要） |
-| `etc/conf/mysql_config.json` | MySQL 连接配置——已加入 .gitignore；复制其 `.template`，通过 `MYSQL_PASSWORD` 注入密码，或全部使用环境变量；见 [MySQL 持久化配置](docs/zh/MySQL持久化配置.md) |
+| `etc/conf/db/postgresql.json` | PostgreSQL 连接配置——已加入 .gitignore；复制 `etc/conf/db/postgresql.json.template` 作为起点（仅 `persistence_mode=postgresql` 时需要） |
+| `etc/conf/db/mysql.json` | MySQL 连接配置——已加入 .gitignore；复制其 `.template`，通过 `MYSQL_PASSWORD` 注入密码，或全部使用环境变量；见 [MySQL 持久化配置](docs/zh/MySQL持久化配置.md) |
 | `.env` | 本地密钥 — 已加入 gitignore；模型定义见 `etc/config/models.yaml`。协商 SDK 也直接从这里读取 `A2AT_*` 变量（见下文） |
 | `etc/config/README_zh.md` | LLM 配置指南 |
 
@@ -432,3 +432,6 @@ workflow-engine 不初始化已废弃的协商状态机。上述配置与上文�
 ## 许可证
 
 本项目基于 **Apache License 2.0** 开源协议。详见 [LICENSE](LICENSE)。
+
+
+数据库连接统一使用 `etc/conf/db/` 模板，密码由 `.env` / 环境变量引用；参见 [Database configuration / 数据库配置](docs/database-configuration.md)。旧连接配置需要显式迁移，不再作为运行时来源。

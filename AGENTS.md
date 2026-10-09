@@ -82,8 +82,8 @@ Key config keys: `ip`, `port`, `enable_https`, `persistence_mode`, `agent_regist
 ### Persistence mode
 
 `persistence_mode=file` (default) → file-based JSON storage under `data/workflow_storage/`.
-`persistence_mode=postgresql` → auto-creates DB tables on startup via `database/utils/table_creation.py`, reads connection from `etc/conf/db_config.json`.
-`persistence_mode=mysql` → the same PSOP, execution-record and user handlers, with MySQL 8.0.19+ via PyMySQL/DBUtils. Connection settings come from `etc/conf/mysql_config.json` or `MYSQL_*` environment variables; see `docs/en/MySQL Persistence.md`. PreFlow, templates, solution packages and sandbox sessions remain file-backed in both database modes.
+`persistence_mode=postgresql` → auto-creates DB tables on startup via `database/utils/table_creation.py`, reads connection from `etc/conf/db/postgresql.json`.
+`persistence_mode=mysql` → the same PSOP, execution-record and user handlers, with MySQL 8.0.19+ via PyMySQL/DBUtils. Connection settings come from `etc/conf/db/mysql.json` or `MYSQL_*` environment variables; see `docs/en/MySQL Persistence.md`. PreFlow, templates, solution packages and sandbox sessions remain file-backed in both database modes.
 
 The `WorkflowStorage` singleton is accessed via `get_workflow_storage()` (uses `@lru_cache(maxsize=1)`).
 
@@ -138,7 +138,7 @@ samples/               # Sample A2A agents + start script
   spn_host_agent/       # SPN ControlPoint, lifecycle, demo auth, and HostAgent composition
 host_agent/             # Business-neutral workflow execution host and A2A server adapters
 database/              # PostgreSQL / MySQL support
-etc/conf/              # server.conf, server.properties, db_config.json
+etc/conf/              # server.conf, server.properties, db/ connection profiles
 samples/agent_credentials.json  # sample AgentCard credential bindings
 tests/                 # All tests (pytest, 57 files + conftest.py)
 data/workflow_storage/ # File-based persistence (PSOP, PreFlow, execution records)
@@ -169,8 +169,8 @@ data/solution_packages/   # Imported solution package records + committed TM For
 
 **Local-only files (do NOT commit):**
 - `etc/conf/server.conf` — Local server configuration. Revert any local changes before committing.
-- `etc/conf/db_config.json` — Local PostgreSQL connection settings, including credentials. Gitignored; copy `etc/conf/db_config.json.template` to get started, and never commit the real file.
-- `etc/conf/mysql_config.json` — Local MySQL settings. Gitignored and excluded from the container build; copy its `.template` and keep the password in `MYSQL_PASSWORD` / `.env`.
+- `etc/conf/db/postgresql.json` — Local PostgreSQL connection settings, including credentials. Gitignored; copy `etc/conf/db/postgresql.json.template` to get started, and never commit the real file.
+- `etc/conf/db/mysql.json` — Local MySQL settings. Gitignored and excluded from the container build; copy its `.template` and keep the password in `MYSQL_PASSWORD` / `.env`.
 
 Note: `workflow-designer/src/service/api.js` is a tracked module (CI runs its tests). Its committed content is the generic default endpoint; developers who point it at a private backend during debugging must revert those local edits before committing.
 
