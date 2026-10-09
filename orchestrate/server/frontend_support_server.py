@@ -59,7 +59,7 @@ from orchestrate.registry_client.client_factory import AgentRegistryClientFactor
 from orchestrate.agentcard_loader import _normalize_agent_dict
 from common.log.audit_logger import audit_logger, OperationObject, OperationName, LogLevel, OperationResult
 from common.util.config_util import get_conf
-from common.util.persistence_mode import is_db_mode
+from orchestrate.persistence import current_context
 from common.util.password_hash import FILE_HASH_PREFIX, hash_password, verify_legacy_bcrypt, verify_password
 from orchestrate.core.model.preflow import PreFlow
 from orchestrate.core.model.psop import PSOP
@@ -255,7 +255,11 @@ class RegisterRequest(BaseModel):
 
 
 def _registration_enabled(conf: dict) -> bool:
-    return (is_db_mode(conf)
+    # A capability question, not a mode question: only a backend that can hold
+    # users may offer self-registration. current_context() falls back to the
+    # file backend when the composition root has not run (tests import the app
+    # directly), and that backend declares no user store.
+    return (current_context().has_users
             and str(conf.get("auth.register.enabled", False)).lower() in ("true", "1", "yes"))
 
 
@@ -264,10 +268,11 @@ async def login(request: LoginRequest, response: Response, _: Any = Depends(Logi
     if not is_auth_enabled():
         return ok(data={"auth_required": False}, message="Authentication disabled")
     conf = get_conf()
-    db_mode = is_db_mode(conf)
-    if db_mode:
-        from database.utils.user_store import authenticate_user
-        user = authenticate_user(request.username, request.password)
+    storage = current_context()
+    if storage.has_users:
+        # Credentials live in the configured backend's user store, which is
+        # also what declares the USERS capability - no mode needed here.
+        user = storage.users.authenticate(request.username, request.password)
         if user is not None:
             role = user.get("role", "user")
             must_change = user.get("must_change_password", False)
@@ -305,8 +310,6 @@ async def register(request: RegisterRequest):
     conf = get_conf()
     if not _registration_enabled(conf):
         raise HTTPException(status_code=403, detail="Self-registration is disabled")
-    if not is_db_mode(conf):
-        raise HTTPException(status_code=400, detail="Registration requires database persistence mode")
     if not re.fullmatch(r"^[a-zA-Z][a-zA-Z0-9_-]{2,63}$", request.username):
         raise HTTPException(status_code=400, detail="Username must start with a letter and contain only letters, digits, underscores or hyphens (3-64 chars)")
     from common.util.password_util import validate_password_complexity
@@ -422,22 +425,21 @@ def _update_access_password_in_conf(conf_path: str, new_password: str) -> bool:
 async def change_password(request: ChangePasswordRequest, http_request: Request):
     """Change the current user's password. Requires a valid token."""
     conf = get_conf()
-    db_mode = is_db_mode(conf)
+    storage = current_context()
     token = extract_token(http_request)
     username = get_session_store().get_username(token) if token else None
     if not username:
         raise HTTPException(status_code=401, detail="Not authenticated")
-    if db_mode:
+    if storage.has_users:
         from common.util.password_util import validate_password_complexity
         is_valid, reason = validate_password_complexity(request.new_password)
         if not is_valid:
             raise HTTPException(status_code=400, detail=f"Password does not meet complexity requirements: {reason}")
-        from database.utils.user_store import authenticate_user, update_password
         # Verify old password
-        user = authenticate_user(username, request.old_password)
+        user = storage.users.authenticate(username, request.old_password)
         if user is None:
             raise HTTPException(status_code=401, detail="Current password is incorrect")
-        if update_password(username, request.new_password):
+        if storage.users.update_password(username, request.new_password):
             clear_must_change_password(username)
             logger.info(f"Password changed for user '{username}'")
             return ok(message="Password changed successfully")

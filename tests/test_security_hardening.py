@@ -29,6 +29,16 @@ from fastapi.testclient import TestClient
 from orchestrate.server.frontend_support_server import app
 from orchestrate.server.auth import get_session_store
 from orchestrate.core.persistence import WorkflowStorage, WorkflowStorageError
+from orchestrate.persistence import StorageContext
+from orchestrate.persistence.sql_backend import SqlPersistenceBackend
+
+
+def _database_context(mode="postgresql"):
+    """A configured database context for tests that gate on the capability.
+
+    Building it opens no connection; only a query would.
+    """
+    return StorageContext(SqlPersistenceBackend(mode=mode))
 
 
 @pytest.fixture
@@ -116,7 +126,12 @@ def test_register_disabled_by_default(client):
         assert "disabled" in resp.json()["message"]
 
 
-def test_auth_check_matches_registration_gate(client):
+def test_auth_check_matches_registration_gate(client, monkeypatch):
+    # The gate asks the storage whether it can hold users, so the test installs
+    # a database context rather than a persistence_mode string.
+    monkeypatch.setattr(
+        "orchestrate.server.frontend_support_server.current_context", _database_context
+    )
     conf = {"persistence_mode": "postgresql"}
     with patch("orchestrate.server.frontend_support_server.get_conf", return_value=conf):
         assert client.get("/rest/v1/orchestrate/auth/check").json()["data"]["registration_enabled"] is False
@@ -126,6 +141,9 @@ def test_auth_check_matches_registration_gate(client):
 
 def test_register_works_when_enabled(client, monkeypatch):
     conf = {"auth.register.enabled": "true", "persistence_mode": "postgresql"}
+    monkeypatch.setattr(
+        "orchestrate.server.frontend_support_server.current_context", _database_context
+    )
     monkeypatch.setattr("orchestrate.server.frontend_support_server.get_conf", lambda: conf)
     monkeypatch.setattr("database.utils.user_store.user_exists", lambda username: False)
     monkeypatch.setattr("database.utils.user_store.create_user", lambda *a, **k: True)

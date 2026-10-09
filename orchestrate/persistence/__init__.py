@@ -35,7 +35,7 @@ from orchestrate.persistence.contracts import (
     PsopRepository,
     UserRepository,
 )
-from orchestrate.persistence.context import StorageContext
+from orchestrate.persistence.context import StorageContext, configure_context, current_context
 from orchestrate.persistence.errors import (
     StorageConfigError,
     StorageConflictError,
@@ -63,7 +63,9 @@ __all__ = [
     "StorageValidationError",
     "UserRepository",
     "build_context",
+    "configure_context",
     "create_backend",
+    "current_context",
     "known_modes",
     "register",
 ]

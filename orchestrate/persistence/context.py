@@ -98,3 +98,33 @@ class StorageContext:
     def close(self) -> None:
         """Release pooled resources; registered as the shutdown hook."""
         self._backend.close()
+
+    def psops_for(self, storage) -> PsopRepository:
+        """PSOP repository for a caller that owns its own file storage."""
+        return self._backend.psops_for(storage)
+
+
+_persistence_context: Optional[StorageContext] = None
+
+
+def configure_context(context: StorageContext) -> StorageContext:
+    """Install the process-wide context. Called once by the composition root."""
+    global _persistence_context
+    _persistence_context = context
+    return context
+
+
+def current_context() -> StorageContext:
+    """Return the configured context, or lazily build the file-mode one.
+
+    The app is a module-level FastAPI global that tests import directly, so the
+    composition root is not guaranteed to have run. Defaulting to the file
+    backend keeps that case working and preserves the historical default of
+    ``persistence_mode=file``.
+    """
+    global _persistence_context
+    if _persistence_context is None:
+        from orchestrate.persistence.factory import build_context
+
+        _persistence_context = build_context()
+    return _persistence_context

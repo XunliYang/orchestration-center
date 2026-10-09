@@ -46,7 +46,7 @@ from orchestrate.persistence.contracts import (
 from orchestrate.workflow_storage_instance import get_workflow_storage
 
 
-class _FilePsopRepository(PsopRepository):
+class FilePsopRepository(PsopRepository):
     def __init__(self, storage: WorkflowStorage) -> None:
         self._storage = storage
 
@@ -128,7 +128,7 @@ class FilePersistenceBackend(PersistenceBackend):
         # Injectable so a test can point the ports at a throwaway directory
         # instead of the process-wide storage singleton.
         self._storage = storage if storage is not None else get_workflow_storage()
-        self._psops = _FilePsopRepository(self._storage)
+        self._psops = FilePsopRepository(self._storage)
         self._executions = _FileExecutionRecordRepository(self._storage)
         self._preflows = FilePreflowRepository(self._storage)
 
@@ -149,3 +149,7 @@ class FilePersistenceBackend(PersistenceBackend):
 
     def close(self) -> None:
         """Nothing pooled; kept so callers can always call ``close()``."""
+
+    def psops_for(self, storage: WorkflowStorage) -> PsopRepository:
+        """Bind the PSOP repository to the storage the caller already owns."""
+        return FilePsopRepository(storage)

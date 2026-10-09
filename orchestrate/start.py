@@ -33,7 +33,7 @@ from common.util.conf_util import get_conf_singleton, set_ssl_folder_permissions
 from common.util.config_util import get_conf
 from common.util.persistence_mode import validate_storage_mode
 from database.utils.user_store import seed_admin_if_empty
-from orchestrate.persistence import build_context
+from orchestrate.persistence import build_context, configure_context
 from orchestrate.server.frontend_support_server import app
 from orchestrate.server.security_preflight import SecurityPreflightError, security_preflight
 
@@ -166,6 +166,7 @@ def initialize_storage(server_config):
     can close it on shutdown.
     """
     storage = build_context(conf=server_config)
+    configure_context(storage)
     storage.check_ready()
     storage.initialize()
     if storage.has_users:
