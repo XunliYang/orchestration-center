@@ -52,7 +52,9 @@ def test_unknown_mode_stops_startup_before_database_or_server(monkeypatch, https
     monkeypatch.setattr(modes, "get_conf", lambda: conf)
     effects = []
     for target, name in [
-        (start, "create_tables"), (start, "seed_admin_if_empty"),
+        # The composition root is the storage seam now: it must not even be
+        # reached for an unknown mode, let alone build a backend or seed a user.
+        (start, "build_context"), (start, "seed_admin_if_empty"),
         (start, "get_conf_singleton"), (start, "CustomUvicornServer"),
         (start.uvicorn, "run"),
     ]:

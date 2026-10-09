@@ -15,6 +15,7 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+import atexit
 import os
 import ssl
 import sys
@@ -30,9 +31,9 @@ from common.util.cipher_converter import CipherConverter
 from common.util.cipher_util import DEFAULT_ENCODING
 from common.util.conf_util import get_conf_singleton, set_ssl_folder_permissions, load_cert_password
 from common.util.config_util import get_conf
-from common.util.persistence_mode import is_db_mode, validate_storage_mode
-from database.utils.table_creation import create_tables
+from common.util.persistence_mode import validate_storage_mode
 from database.utils.user_store import seed_admin_if_empty
+from orchestrate.persistence import build_context
 from orchestrate.server.frontend_support_server import app
 from orchestrate.server.security_preflight import SecurityPreflightError, security_preflight
 
@@ -152,6 +153,34 @@ class CustomUvicornServer:
         record_startup_log()
         server.run()
 
+def initialize_storage(server_config):
+    """Build the configured storage backend and make it usable.
+
+    This is the composition root: the one place that decides which backend the
+    process runs on. Keeping the order explicit and testable matters, because
+    it must stay after the security preflight, exactly like the previous
+    ``create_tables()`` call: prove the backend is reachable, then create or
+    migrate the schema, then bootstrap the first operator account.
+
+    Returns the :class:`~orchestrate.persistence.StorageContext` so the caller
+    can close it on shutdown.
+    """
+    storage = build_context(conf=server_config)
+    storage.check_ready()
+    storage.initialize()
+    if storage.has_users:
+        # Seed the default admin user if the users table is empty. user_store
+        # hashes the real plaintext password server-side (see #9), so this is
+        # passed as-is rather than pre-hashed.
+        if seed_admin_if_empty("OpenAN@2026"):
+            logger.info("Default admin user 'admin' created; a password change is required on first login")
+        else:
+            logger.info("Users already exist, skipping admin seed")
+    else:
+        logger.info(f"Storage mode '{storage.mode}' has no user store; skipping admin seed")
+    return storage
+
+
 def main():
     """
     Main entry point for starting the PSOP server.
@@ -180,15 +209,8 @@ def main():
             },
             'user_name': get_user_info_from_env().get('username'),
         })
-    if is_db_mode():
-        create_tables()
-        # Seed default admin user if users table is empty. user_store now
-        # hashes the real plaintext password server-side (see #9), so this
-        # is passed as-is rather than pre-hashed.
-        if seed_admin_if_empty("OpenAN@2026"):
-            logger.info("Default admin user 'admin' created; a password change is required on first login")
-        else:
-            logger.info("Users already exist, skipping admin seed")
+    storage = initialize_storage(server_config)
+    atexit.register(storage.close)
     if not is_enable_https:
         uvicorn.run(app, host=server_config.get('ip', "127.0.0.1"), port=int(server_config.get('port', 5001)), timeout_graceful_shutdown=2)
     else:
