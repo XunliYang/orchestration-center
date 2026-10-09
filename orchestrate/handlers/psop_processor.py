@@ -17,14 +17,13 @@
 
 import json
 
-from typing import Optional
-
 from loguru import logger
 
 from database.utils.db_connection import create_connection
 from database.utils.query_execution import execute_query
 from database.utils.sql_dialect import upsert_sql
 from orchestrate.core.model.psop import PSOP
+from orchestrate.core.task_summary import build_tasks_summary  # noqa: F401  re-exported for existing callers
 from orchestrate.core.workflow_search_result import WorkflowSearchResult
 
 
@@ -67,18 +66,6 @@ def custom_delete_psop(workflow_id):
         return False
     finally:
         conn.close()
-
-
-def build_tasks_summary(psop: PSOP) -> Optional[str]:
-    task_descriptions = []
-    for step in psop.steps[:8]:
-        for task in step.subtasks[:3]:
-            desc = (task.description or "").strip()
-            if desc:
-                task_descriptions.append(f"[{step.name}] {desc}")
-    if not task_descriptions:
-        return None
-    return "; ".join(task_descriptions[:12])
 
 
 def get_all_psops():
