@@ -30,16 +30,16 @@ by the server's `max_allowed_packet` and the existing HTTP request limits.
 
 ## Local Python service
 
-1. Copy `etc/conf/mysql_config.json.template` to `etc/conf/mysql_config.json` and
+1. Copy `etc/conf/db/mysql.json.template` to `etc/conf/db/mysql.json` and
    set the host, port, database and user. The real file is gitignored and excluded
-   from Docker builds. The PostgreSQL `db_config.json` is not used in MySQL mode.
+   from Docker builds. The PostgreSQL `db/postgresql.json` is not used in MySQL mode.
 2. Supply the variable named by `password_env` (default `MYSQL_PASSWORD`) through
    process environment or the root `.env`. Explicit process values override `.env`.
    `MYSQL_HOST`, `MYSQL_PORT`, `MYSQL_DATABASE`, `MYSQL_USER`, pool/timeout settings
    and `MYSQL_SSL_CA` also override the JSON file. An environment-only deployment
    needs no JSON file. A missing password variable is an error; an explicitly empty
-   variable allows a passwordless disposable local instance. A legacy explicit
-   `password` field in a protected JSON file is accepted but not recommended.
+   variable allows a passwordless disposable local instance.
+   Literal password fields are rejected; use password_env only.
 3. Set `persistence_mode=mysql`. Initialize the first administrator with a private
    password before exposing the service (this also permits the authenticated HTTP
    startup security preflight on a fresh database):
@@ -59,7 +59,7 @@ by the server's `max_allowed_packet` and the existing HTTP request limits.
 |---|---|---|
 | `host`, `port` | `MYSQL_HOST`, `MYSQL_PORT` | `127.0.0.1`, `3306` |
 | `database`, `user` | `MYSQL_DATABASE`, `MYSQL_USER` | `orchestration_center`; user required |
-| `password_env` | variable named by the field | `MYSQL_PASSWORD`; required unless explicit `password` exists |
+| `password_env` | variable named by the field | `MYSQL_PASSWORD`; required (may explicitly be empty) |
 | `pool_min`, `pool_max` | `MYSQL_POOL_MIN`, `MYSQL_POOL_MAX` | `1`, `20`; per process; `0 <= min <= max`, max >= 1 |
 | `connect_timeout` | `MYSQL_CONNECT_TIMEOUT` | `10` seconds (TCP connect) |
 | `read_timeout`, `write_timeout` | `MYSQL_READ_TIMEOUT`, `MYSQL_WRITE_TIMEOUT` | `30` seconds each (socket operations, not a total query deadline) |

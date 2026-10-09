@@ -22,6 +22,7 @@ import bcrypt
 import pytest
 
 from database.utils import user_store
+from orchestrate.persistence.errors import StorageError, StorageUnavailableError
 
 
 @pytest.fixture(autouse=True)
@@ -71,14 +72,16 @@ class TestCreateUser:
             assert user_store._verify_password(stored, "", "v4", password)
             assert not user_store._verify_password(stored, "", "v4", "密" * 39 + "别")
 
-    def test_returns_false_on_db_error(self):
+    def test_raises_on_db_error(self):
         with patch.object(user_store, "create_connection", return_value=_mock_conn()), \
              patch.object(user_store, "execute_query", return_value=(None, RuntimeError("boom"))):
-            assert user_store.create_user("alice", "pw") is False
+            with pytest.raises(StorageError):
+                user_store.create_user("alice", "pw")
 
-    def test_returns_false_when_no_connection(self):
+    def test_raises_when_no_connection(self):
         with patch.object(user_store, "create_connection", return_value=None):
-            assert user_store.create_user("alice", "pw") is False
+            with pytest.raises(StorageUnavailableError):
+                user_store.create_user("alice", "pw")
 
     def test_successful_creation_marks_a_user_as_existing(self):
         with patch.object(user_store, "create_connection", return_value=_mock_conn()), \
@@ -89,7 +92,8 @@ class TestCreateUser:
     def test_failed_creation_does_not_mark_a_user_as_existing(self):
         with patch.object(user_store, "create_connection", return_value=_mock_conn()), \
              patch.object(user_store, "execute_query", return_value=(None, RuntimeError("boom"))):
-            user_store.create_user("alice", "pw")
+            with pytest.raises(StorageError):
+                user_store.create_user("alice", "pw")
             assert user_store._any_user_exists_cache is False
 
 
@@ -238,10 +242,11 @@ class TestUpdatePassword:
             assert params[2] == "v4"
             assert user_store._verify_password(params[0], "", "v4", "NewPassw0rd!")
 
-    def test_returns_false_on_db_error(self):
+    def test_raises_on_db_error(self):
         with patch.object(user_store, "create_connection", return_value=_mock_conn()), \
              patch.object(user_store, "execute_query", return_value=(None, RuntimeError("boom"))):
-            assert user_store.update_password("alice", "NewPassw0rd!") is False
+            with pytest.raises(StorageError):
+                user_store.update_password("alice", "NewPassw0rd!")
 
 
 class TestSeedAdminIfEmpty:
@@ -280,14 +285,16 @@ class TestDeleteUser:
             assert "DELETE FROM users" in query
             assert params == ("alice",)
 
-    def test_returns_false_on_db_error(self):
+    def test_raises_on_db_error(self):
         with patch.object(user_store, "create_connection", return_value=_mock_conn()), \
              patch.object(user_store, "execute_query", return_value=(None, RuntimeError("boom"))):
-            assert user_store.delete_user("alice") is False
+            with pytest.raises(StorageError):
+                user_store.delete_user("alice")
 
-    def test_returns_false_when_no_connection(self):
+    def test_raises_when_no_connection(self):
         with patch.object(user_store, "create_connection", return_value=None):
-            assert user_store.delete_user("alice") is False
+            with pytest.raises(StorageUnavailableError):
+                user_store.delete_user("alice")
 
 
 class TestHasAnyUser:
@@ -303,9 +310,9 @@ class TestHasAnyUser:
 
     def test_raises_on_db_error(self):
         with patch.object(user_store, "create_connection", return_value=_mock_conn()), \
-             patch.object(user_store, "execute_query", return_value=(None, RuntimeError("boom"))):
+             patch.object(user_store, "execute_query", return_value=(None, ConnectionError("boom"))):
             # fail-closed:DB 异常必须抛错(认证网关据此返回 503),不能当作"无用户"放行
-            with pytest.raises(RuntimeError):
+            with pytest.raises(StorageUnavailableError):
                 user_store.has_any_user()
 
     def test_raises_when_no_connection(self):

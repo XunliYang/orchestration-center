@@ -23,6 +23,7 @@ config_util.get_conf = lambda: conf
 from database.utils import mysql_connection
 
 mysql_connection.load_mysql_config = lambda: json.loads(os.environ["OC_MYSQL_SMOKE_CONFIG"])
+conf["connection_config"] = json.loads(os.environ["OC_MYSQL_SMOKE_CONFIG"])
 
 from database.utils.table_creation import create_tables
 from database.utils.user_store import seed_admin_if_empty

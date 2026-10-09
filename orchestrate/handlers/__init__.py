@@ -42,13 +42,13 @@ HandlerRegistry.register_default(InterfaceType.LIST_EXECUTION_RECORDS, file_hand
 HandlerRegistry.register_default(InterfaceType.GET_EXECUTION_RECORD, file_handlers.GetExecutionRecordHandler)
 HandlerRegistry.register_default(InterfaceType.DELETE_EXECUTION_RECORD, file_handlers.DeleteExecutionRecordHandler)
 
-HandlerRegistry.register(InterfaceType.SAVE_PSOP, db_handlers.CustomSavePsopHandler)
-HandlerRegistry.register(InterfaceType.DELETE_PSOP, db_handlers.CustomDeletePsopHandler)
-HandlerRegistry.register(InterfaceType.GET_ALL_PSOP, db_handlers.CustomGetAllPsopsHandler)
-HandlerRegistry.register(InterfaceType.GET_PSOP_BY_ID, db_handlers.CustomGetPsopHandler)
-HandlerRegistry.register(InterfaceType.SAVE_EXECUTION_RECORD, db_handlers.CustomSaveExecutionRecordHandler)
-HandlerRegistry.register(InterfaceType.LIST_EXECUTION_RECORDS, db_handlers.CustomListExecutionRecordsHandler)
-HandlerRegistry.register(InterfaceType.GET_EXECUTION_RECORD, db_handlers.CustomGetExecutionRecordHandler)
-HandlerRegistry.register(InterfaceType.DELETE_EXECUTION_RECORD, db_handlers.CustomDeleteExecutionRecordHandler)
+HandlerRegistry.register(InterfaceType.SAVE_PSOP, db_handlers.CustomSavePsopHandler, bundled=True)
+HandlerRegistry.register(InterfaceType.DELETE_PSOP, db_handlers.CustomDeletePsopHandler, bundled=True)
+HandlerRegistry.register(InterfaceType.GET_ALL_PSOP, db_handlers.CustomGetAllPsopsHandler, bundled=True)
+HandlerRegistry.register(InterfaceType.GET_PSOP_BY_ID, db_handlers.CustomGetPsopHandler, bundled=True)
+HandlerRegistry.register(InterfaceType.SAVE_EXECUTION_RECORD, db_handlers.CustomSaveExecutionRecordHandler, bundled=True)
+HandlerRegistry.register(InterfaceType.LIST_EXECUTION_RECORDS, db_handlers.CustomListExecutionRecordsHandler, bundled=True)
+HandlerRegistry.register(InterfaceType.GET_EXECUTION_RECORD, db_handlers.CustomGetExecutionRecordHandler, bundled=True)
+HandlerRegistry.register(InterfaceType.DELETE_EXECUTION_RECORD, db_handlers.CustomDeleteExecutionRecordHandler, bundled=True)
 
 __all__ = ["db_handlers", "file_handlers"]

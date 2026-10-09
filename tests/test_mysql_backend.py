@@ -131,28 +131,30 @@ def test_ddl_handles_legacy_users_without_postgres_syntax(backend_dependencies):
 def test_config_env_overrides_file_and_keeps_password_out_of_template(monkeypatch, tmp_path):
     monkeypatch.setattr(mysql_connection, "get_root_path", lambda: str(tmp_path))
     env = {"MYSQL_USER": "env-user", "MYSQL_PASSWORD": "env-secret", "MYSQL_PORT": "3307"}
-    monkeypatch.setattr(mysql_connection, "dotenv_values", lambda path: {"MYSQL_PASSWORD": "dotenv-secret"})
+    from common.util import database_config
+    monkeypatch.setattr(database_config, "dotenv_values", lambda path, **kwargs: {"MYSQL_PASSWORD": "dotenv-secret"})
     monkeypatch.setattr(mysql_connection.os, "environ", env)
-    config_path = tmp_path / "etc" / "conf" / "mysql_config.json"
+    config_path = tmp_path / "etc" / "conf" / "db" / "mysql.json"
     config_path.parent.mkdir(parents=True)
-    config_path.write_text(json.dumps({"host": "db", "user": "file-user", "password": "file-secret"}))
+    config_path.write_text(json.dumps({"host": "db", "user": "file-user", "password_env": "MYSQL_PASSWORD"}))
     config = mysql_connection.load_mysql_config()
     assert config["host"] == "db"
     assert config["user"] == "env-user"
     assert config["password"] == "env-secret"
-    assert config["port"] == "3307"
-    template = Path(__file__).resolve().parents[1] / "etc/conf/mysql_config.json.template"
+    assert config["port"] == 3307
+    template = Path(__file__).resolve().parents[1] / "etc/conf/db/mysql.json.template"
     assert "password" not in json.loads(template.read_text())
     assert "password_env" in json.loads(template.read_text())
 
 
 def test_missing_secret_fails_and_explicit_empty_password_is_supported(monkeypatch, tmp_path):
     monkeypatch.setattr(mysql_connection, "get_root_path", lambda: str(tmp_path))
-    monkeypatch.setattr(mysql_connection, "dotenv_values", lambda path: {})
+    from common.util import database_config
+    monkeypatch.setattr(database_config, "dotenv_values", lambda path, **kwargs: {})
     monkeypatch.setattr(mysql_connection.os, "environ", {})
     with pytest.raises(ValueError, match="MYSQL_PASSWORD.*not set"):
         mysql_connection.load_mysql_config()
-    monkeypatch.setattr(mysql_connection.os, "environ", {"MYSQL_PASSWORD": ""})
+    monkeypatch.setattr(mysql_connection.os, "environ", {"MYSQL_PASSWORD": "", "MYSQL_USER": "fixture"})
     assert mysql_connection.load_mysql_config()["password"] == ""
 
 
@@ -186,12 +188,14 @@ def test_mysql_config_excluded_from_git_and_container():
 
 def test_environment_only_config_without_materializing_files(monkeypatch, tmp_path):
     monkeypatch.setattr(mysql_connection, "get_root_path", lambda: str(tmp_path))
-    monkeypatch.setattr(mysql_connection, "dotenv_values", lambda path: {})
+    from common.util import database_config
+    monkeypatch.setattr(database_config, "dotenv_values", lambda path, **kwargs: {})
     monkeypatch.setattr(mysql_connection.os, "environ", {
         "MYSQL_HOST": "test-db", "MYSQL_USER": "tester", "MYSQL_PASSWORD": "secret",
         "MYSQL_DATABASE": "test_schema",
     })
-    assert mysql_connection.load_mysql_config() == {
+    config = mysql_connection.load_mysql_config()
+    assert {key: config[key] for key in ("host", "user", "password", "database")} == {
         "host": "test-db", "user": "tester", "password": "secret", "database": "test_schema",
     }
     assert list(tmp_path.iterdir()) == []

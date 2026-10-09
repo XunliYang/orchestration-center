@@ -72,7 +72,10 @@ def create(mode: Optional[str] = None, conf: Optional[dict] = None) -> Persisten
     Raises :class:`StorageConfigError` for an unknown or unregistered mode
     instead of silently falling back to file storage.
     """
-    resolved = str(mode or persistence_mode()).lower()
+    selected = mode
+    if selected is None:
+        selected = conf["persistence_mode"] if conf is not None and "persistence_mode" in conf else persistence_mode()
+    resolved = str(selected).lower()
     if resolved not in KNOWN_STORAGE_MODES:
         raise StorageConfigError(
             f"Unsupported persistence_mode '{resolved}'; expected one of {sorted(KNOWN_STORAGE_MODES)}"

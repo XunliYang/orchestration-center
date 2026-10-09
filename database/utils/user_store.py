@@ -39,6 +39,8 @@ from common.util.password_hash import PASSWORD_SCHEME, hash_password, verify_leg
 from database.utils.db_connection import create_connection
 from database.utils.query_execution import execute_query
 from database.utils.sql_dialect import null_safe_equal
+from database.utils.storage_errors import require_connection, raise_storage_error, classify_error, close_resource
+from orchestrate.persistence.errors import StorageConflictError, StorageError
 
 # has_any_user() gates is_auth_enabled() (orchestrate/server/auth.py),
 # which runs on every /rest/v1/orchestrate/* request -- an unpooled DB
@@ -52,6 +54,11 @@ _any_user_exists_lock = threading.Lock()
 
 
 def _mark_user_exists() -> None:
+    from database.utils.connection_provider import current_provider
+    provider = current_provider()
+    if provider is not None:
+        provider.users_observed = True
+        return
     global _any_user_exists_cache
     if not _any_user_exists_cache:
         with _any_user_exists_lock:
@@ -97,10 +104,8 @@ def _generate_salt() -> str:
 
 
 def create_user(username: str, password: str, role: str = "user", must_change_password: bool = False) -> bool:
-    """Create a new user with the current password scheme. Returns True on success."""
-    conn = create_connection()
-    if conn is None:
-        return False
+    """True on creation, False on duplicate username; storage failures raise."""
+    conn = require_connection(create_connection())
     try:
         # bcrypt (v3) embeds its own salt; the salt column stays empty for
         # schema compatibility.
@@ -112,13 +117,14 @@ def create_user(username: str, password: str, role: str = "user", must_change_pa
             (username, password_hash, "", role, must_change_password, _CURRENT_PASSWORD_SCHEME),
         )
         if err:
-            logger.warning(f"Failed to create user '{username}': {err}")
-            return False
+            if isinstance(classify_error(err, "Create user"), StorageConflictError):
+                return False
+            raise_storage_error(err, "Create user")
         logger.info(f"User '{username}' created with role '{role}'")
         _mark_user_exists()
         return True
     finally:
-        conn.close()
+        close_resource(conn)
 
 
 def _upgrade_password_scheme(
@@ -130,9 +136,7 @@ def _upgrade_password_scheme(
     confirmed ``password`` is correct, so this is a same-password re-hash,
     not a credential change -- must_change_password is untouched.
     """
-    conn = create_connection()
-    if conn is None:
-        return
+    conn = require_connection(create_connection())
     try:
         password_hash = _hash_password_bcrypt(password)
         _, err = execute_query(
@@ -143,13 +147,13 @@ def _upgrade_password_scheme(
             (password_hash, "", _CURRENT_PASSWORD_SCHEME, username, old_hash, old_salt, old_scheme),
         )
         if err:
-            logger.warning(f"Failed to upgrade password scheme for '{username}': {err}")
+            raise_storage_error(err, "Upgrade password scheme")
         else:
             # execute_query does not expose rowcount; a concurrent password
             # change may make the compare-and-swap a safe no-op.
             logger.debug(f"Password scheme upgrade attempted for '{username}'")
     finally:
-        conn.close()
+        close_resource(conn)
 
 
 def authenticate_user(username: str, password: str) -> Optional[dict]:
@@ -161,9 +165,7 @@ def authenticate_user(username: str, password: str) -> Optional[dict]:
     no forced reset. A successful legacy or v2 login is opportunistically
     upgraded to the current bcrypt scheme.
     """
-    conn = create_connection()
-    if conn is None:
-        return None
+    conn = require_connection(create_connection())
     try:
         result, err = execute_query(
             conn,
@@ -171,7 +173,9 @@ def authenticate_user(username: str, password: str) -> Optional[dict]:
             "FROM users WHERE username = %s",
             (username,),
         )
-        if err or not result:
+        if err:
+            raise_storage_error(err, "Authenticate user")
+        if not result:
             return None
         row = result[0]
         stored_hash = row[1]
@@ -184,54 +188,57 @@ def authenticate_user(username: str, password: str) -> Optional[dict]:
             return None
 
         if scheme != _CURRENT_PASSWORD_SCHEME:
-            _upgrade_password_scheme(username, password, stored_hash, salt, row[5])
+            try:
+                _upgrade_password_scheme(username, password, stored_hash, salt, row[5])
+            except StorageError:
+                # Hash migration is opportunistic, not part of credential
+                # verification. A failed upgrade must not reject a valid login.
+                logger.warning("Password scheme upgrade deferred after a storage failure")
 
         return {"username": row[0], "role": role, "must_change_password": must_change_password}
     finally:
-        conn.close()
+        close_resource(conn)
 
 
 def user_exists(username: str) -> bool:
-    conn = create_connection()
-    if conn is None:
-        return False
+    conn = require_connection(create_connection())
     try:
         result, err = execute_query(
             conn,
             "SELECT 1 FROM users WHERE username = %s",
             (username,),
         )
-        return bool(result and not err)
+        if err:
+            raise_storage_error(err, "Check user")
+        return bool(result)
     finally:
-        conn.close()
+        close_resource(conn)
 
 
 def list_users() -> list[dict]:
     """List all users (without password hashes)."""
-    conn = create_connection()
-    if conn is None:
-        return []
+    conn = require_connection(create_connection())
     try:
         result, err = execute_query(
             conn,
             "SELECT username, role, must_change_password, created_at FROM users ORDER BY created_at",
             None,
         )
-        if err or not result:
+        if err:
+            raise_storage_error(err, "List users")
+        if not result:
             return []
         return [
             {"username": r[0], "role": r[1], "must_change_password": bool(r[2]), "created_at": str(r[3])}
             for r in result
         ]
     finally:
-        conn.close()
+        close_resource(conn)
 
 
 def delete_user(username: str) -> bool:
     """Delete a user. Returns True on success."""
-    conn = create_connection()
-    if conn is None:
-        return False
+    conn = require_connection(create_connection())
     try:
         _, err = execute_query(
             conn,
@@ -239,10 +246,10 @@ def delete_user(username: str) -> bool:
             (username,),
         )
         if err:
-            return False
+            raise_storage_error(err, "Delete user")
         return True
     finally:
-        conn.close()
+        close_resource(conn)
 
 
 def has_any_user() -> bool:
@@ -252,35 +259,34 @@ def has_any_user() -> bool:
     hot path (is_auth_enabled()) skip the DB round trip entirely once at
     least one user has ever been observed to exist.
 
-    Raises RuntimeError when the database is unreachable: the caller
+    Raises StorageUnavailableError when the database is unreachable: the caller
     (auth gate) must fail closed with 503 rather than treat "cannot
     determine" as "no users -> auth disabled", which would leave every
     endpoint unauthenticated during a database outage.
     """
-    if _any_user_exists_cache:
+    from database.utils.connection_provider import current_provider
+    provider = current_provider()
+    cached = provider.users_observed if provider is not None else _any_user_exists_cache
+    if cached:
         return True
-    conn = create_connection()
-    if conn is None:
-        raise RuntimeError("User store unavailable: cannot connect to the database")
+    conn = require_connection(create_connection())
     try:
         result, err = execute_query(conn, "SELECT 1 FROM users LIMIT 1", None)
         if err:
-            raise RuntimeError(f"User store unavailable: {err}")
+            raise_storage_error(err, "Check configured users")
         found = bool(result)
         if found:
             _mark_user_exists()
         return found
     finally:
-        conn.close()
+        close_resource(conn)
 
 
 def update_password(username: str, new_password: str) -> bool:
     """Update a user's password (plaintext) under the current scheme and
     clear any pending forced-change flag. Returns True on success.
     """
-    conn = create_connection()
-    if conn is None:
-        return False
+    conn = require_connection(create_connection())
     try:
         # bcrypt (v3) embeds its own salt; the salt column stays empty.
         password_hash = _hash_password_bcrypt(new_password)
@@ -291,12 +297,11 @@ def update_password(username: str, new_password: str) -> bool:
             (password_hash, "", _CURRENT_PASSWORD_SCHEME, username),
         )
         if err:
-            logger.warning(f"Failed to update password for '{username}': {err}")
-            return False
+            raise_storage_error(err, "Update password")
         logger.info(f"Password updated for user '{username}'")
         return True
     finally:
-        conn.close()
+        close_resource(conn)
 
 def seed_admin_if_empty(default_password: str = "OpenAN@2026") -> bool:
     """Create default admin user if no users exist.

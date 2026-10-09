@@ -39,6 +39,6 @@ def test_postgres_environment_bridge_does_not_require_baked_in_secret_file(tmp_p
                DB_NAME="orchestration_center", DB_USERNAME="tester", DB_PASSWORD="quoted'password\"")
     result = subprocess.run(["bash", str(SCRIPT), "true"], env=env, text=True, capture_output=True)
     assert result.returncode == 0, result.stderr
-    cfg = json.loads((tmp_path / "etc/conf/db_config.json").read_text())
-    assert cfg["password"] == env["DB_PASSWORD"]
+    assert not (tmp_path / "etc/conf/db_config.json").exists()
+    assert not (tmp_path / "etc/conf/db/postgresql.json").exists()
     assert env["DB_PASSWORD"] not in result.stdout + result.stderr

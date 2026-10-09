@@ -539,8 +539,8 @@ The external API (`/api/v1/*`) is protected by mTLS at the TLS layer when `enabl
 |-------------|---------|
 | `etc/conf/server.conf` | Server IP, port, TLS certificates, persistence mode, registry URL, access password, `client_verify_server` |
 | `etc/conf/server.properties` | TLS ciphers, rate limiting, connection limits |
-| `etc/conf/db_config.json` | PostgreSQL connection settings — gitignored; copy `etc/conf/db_config.json.template` to get started (only needed for `persistence_mode=postgresql`) |
-| `etc/conf/mysql_config.json` | MySQL connection settings — gitignored; copy its `.template`, inject `MYSQL_PASSWORD`, or use environment-only configuration; see [MySQL persistence](docs/en/MySQL%20Persistence.md) |
+| `etc/conf/db/postgresql.json` | PostgreSQL connection settings — gitignored; copy `etc/conf/db/postgresql.json.template` to get started (only needed for `persistence_mode=postgresql`) |
+| `etc/conf/db/mysql.json` | MySQL connection settings — gitignored; copy its `.template`, inject `MYSQL_PASSWORD`, or use environment-only configuration; see [MySQL persistence](docs/en/MySQL%20Persistence.md) |
 | `.env` | Local model settings and A2A-T SDK settings — gitignored; production should inject secrets through its environment |
 | `etc/config/README_en.md` | LLM configuration guide |
 | `generate_selfsign_cert.py` | Self-signed certificate generator (RSA 3072) |
@@ -632,3 +632,6 @@ The workflow engine does not initialize the retired A2A-T negotiation state mach
 ## License
 
 This project is licensed under the **Apache License 2.0**. See [LICENSE](LICENSE) for details.
+
+
+数据库连接统一使用 `etc/conf/db/` 模板，密码由 `.env` / 环境变量引用；参见 [Database configuration / 数据库配置](docs/database-configuration.md)。旧连接配置不再作为运行时来源。

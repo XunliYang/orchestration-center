@@ -22,6 +22,8 @@ from loguru import logger
 from database.utils.db_connection import create_connection
 from database.utils.query_execution import execute_query
 from database.utils.sql_dialect import upsert_sql, timestamp_parameter, timestamp_iso
+from database.utils.storage_errors import require_connection, raise_storage_error, close_resource
+from orchestrate.persistence.errors import StorageCorruptionError
 from orchestrate.core.model.execution_record import ExecutionRecord
 
 
@@ -30,9 +32,7 @@ def db_save_execution_record(record: ExecutionRecord) -> str:
         "execution_id", "psop_id", "psop_name", "started_at", "completed_at",
         "status", "step_count", "record_content",
     ))
-    conn = create_connection()
-    if conn is None:
-        raise RuntimeError("Unable to connect to database")
+    conn = require_connection(create_connection())
     try:
         _, error = execute_query(conn, save_sql, (
             record.execution_id,
@@ -45,12 +45,11 @@ def db_save_execution_record(record: ExecutionRecord) -> str:
             record.model_dump_json(),
         ))
         if error:
-            logger.error(f"[DB] Failed to save execution record (id={record.execution_id}): {error}")
-            raise RuntimeError(f"Failed to save execution record: {error}")
+            raise_storage_error(error, "Failed to save execution record")
         logger.info(f"[DB] Execution record saved (id={record.execution_id}, psop='{record.psop_name}', status={record.status})")
         return record.execution_id
     finally:
-        conn.close()
+        close_resource(conn)
 
 
 def db_list_execution_records():
@@ -59,14 +58,11 @@ def db_list_execution_records():
                        status, step_count, record_content
                 FROM execution_records ORDER BY started_at DESC
                 """
-    conn = create_connection()
-    if conn is None:
-        return []
+    conn = require_connection(create_connection())
     try:
         rows, error = execute_query(conn, query_sql)
         if error:
-            logger.error(f"[DB] Failed to list execution records: {error}")
-            return []
+            raise_storage_error(error, "Failed to list execution records")
         result = []
         for row in rows:
             summary = {
@@ -79,42 +75,43 @@ def db_list_execution_records():
                 "step_count": row[6],
                 "error": None,
             }
-            try:
-                content = json.loads(row[7]) if row[7] else {}
-                summary["error"] = content.get("error")
-            except Exception:
-                logger.warning(f"[DB] Failed to parse execution record content for {row[0]}")
+            # Legacy rows may omit the nullable snapshot; their scalar summary
+            # is still usable. A present but invalid snapshot is corruption.
+            if row[7] is not None:
+                try:
+                    content = json.loads(row[7])
+                    summary["error"] = content.get("error")
+                except (ValueError, TypeError, AttributeError) as exc:
+                    raise StorageCorruptionError("Stored execution record is invalid") from exc
             result.append(summary)
         logger.debug(f"[DB] Listed {len(result)} execution record(s)")
         return result
     finally:
-        conn.close()
+        close_resource(conn)
 
 
 def db_get_execution_record(execution_id: str):
     query_sql = "SELECT record_content FROM execution_records WHERE execution_id = %s"
-    conn = create_connection()
-    if conn is None:
-        return None
+    conn = require_connection(create_connection())
     try:
         results, error = execute_query(conn, query_sql, (execution_id,))
         if error:
-            logger.error(f"[DB] Failed to load execution record (id={execution_id}): {error}")
-            return None
+            raise_storage_error(error, "Failed to load execution record")
         if results and len(results) > 0:
             logger.debug(f"[DB] Execution record loaded (id={execution_id})")
-            return ExecutionRecord.model_validate(json.loads(results[0][0]))
+            try:
+                return ExecutionRecord.model_validate(json.loads(results[0][0]))
+            except (ValueError, TypeError) as exc:
+                raise StorageCorruptionError("Stored execution record is invalid") from exc
         logger.warning(f"[DB] Execution record not found (id={execution_id})")
         return None
     finally:
-        conn.close()
+        close_resource(conn)
 
 
 def db_delete_execution_record(execution_id: str) -> bool:
     delete_sql = "DELETE FROM execution_records WHERE execution_id = %s"
-    conn = create_connection()
-    if conn is None:
-        return False
+    conn = require_connection(create_connection())
     try:
         cur = conn.cursor()
         try:
@@ -127,9 +124,12 @@ def db_delete_execution_record(execution_id: str) -> bool:
                 logger.warning(f"[DB] Execution record not found for deletion (id={execution_id})")
             return deleted
         finally:
-            cur.close()
+            close_resource(cur)
     except Exception as e:
-        logger.error(f"[DB] Failed to delete execution record (id={execution_id}): {e}")
-        return False
+        try:
+            conn.rollback()
+        except Exception:
+            logger.warning("[DB] Rollback failed while deleting execution record")
+        raise_storage_error(e, "Failed to delete execution record")
     finally:
-        conn.close()
+        close_resource(conn)

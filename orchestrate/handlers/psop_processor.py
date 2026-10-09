@@ -22,6 +22,8 @@ from loguru import logger
 from database.utils.db_connection import create_connection
 from database.utils.query_execution import execute_query
 from database.utils.sql_dialect import upsert_sql
+from database.utils.storage_errors import require_connection, raise_storage_error, close_resource
+from orchestrate.persistence.errors import StorageCorruptionError
 from orchestrate.core.model.psop import PSOP
 from orchestrate.core.task_summary import build_tasks_summary  # noqa: F401  re-exported for existing callers
 from orchestrate.core.workflow_search_result import WorkflowSearchResult
@@ -29,25 +31,20 @@ from orchestrate.core.workflow_search_result import WorkflowSearchResult
 
 def custom_save_psop(psop):
     save_sql = upsert_sql("psop", "id", ("id", "name", "description", "psop_content"))
-    conn = create_connection()
-    if conn is None:
-        raise RuntimeError("Unable to connect to database")
+    conn = require_connection(create_connection())
     try:
         _, error = execute_query(conn, save_sql, (psop.id, psop.name, psop.description, psop.model_dump_json()))
         if error:
-            logger.error(f"[DB] Failed to save PSOP '{psop.name}' (id={psop.id}): {error}")
-            raise RuntimeError(f"Failed to save PSOP: {error}")
+            raise_storage_error(error, "Failed to save PSOP")
         logger.info(f"[DB] PSOP saved: '{psop.name}' (id={psop.id})")
         return psop.id
     finally:
-        conn.close()
+        close_resource(conn)
 
 
 def custom_delete_psop(workflow_id):
     delete_sql = "DELETE FROM psop WHERE id = %s"
-    conn = create_connection()
-    if conn is None:
-        return False
+    conn = require_connection(create_connection())
     try:
         cur = conn.cursor()
         try:
@@ -60,27 +57,27 @@ def custom_delete_psop(workflow_id):
                 logger.warning(f"[DB] PSOP not found for deletion (id={workflow_id})")
             return deleted
         finally:
-            cur.close()
+            close_resource(cur)
     except Exception as e:
-        logger.error(f"[DB] Failed to delete PSOP (id={workflow_id}): {e}")
-        return False
+        try:
+            conn.rollback()
+        except Exception:
+            logger.warning("[DB] Rollback failed while deleting PSOP")
+        raise_storage_error(e, "Failed to delete PSOP")
     finally:
-        conn.close()
+        close_resource(conn)
 
 
 def get_all_psops():
     query_sql = "SELECT psop_content FROM psop"
-    conn = create_connection()
-    if conn is None:
-        return []
+    conn = require_connection(create_connection())
     try:
         psops, error = execute_query(conn, query_sql)
         if error:
-            logger.error(f"[DB] Failed to list PSOPs: {error}")
-            return []
+            raise_storage_error(error, "Failed to list PSOPs")
         result = []
         for row in psops:
-            psop = PSOP.model_validate(json.loads(row[0]))
+            psop = _decode_psop(row[0])
             result.append(WorkflowSearchResult(
                 workflow_id=psop.id,
                 workflow_type="psop",
@@ -95,24 +92,28 @@ def get_all_psops():
         logger.debug(f"[DB] Listed {len(result)} PSOP(s)")
         return result
     finally:
-        conn.close()
+        close_resource(conn)
 
 
 def get_psop_by_id(psop_id):
     query_sql = "SELECT psop_content FROM psop WHERE id = %s"
-    conn = create_connection()
-    if conn is None:
-        return None
+    conn = require_connection(create_connection())
     try:
         results, error = execute_query(conn, query_sql, (psop_id,))
         if error:
-            logger.error(f"[DB] Failed to load PSOP (id={psop_id}): {error}")
-            return None
+            raise_storage_error(error, "Failed to load PSOP")
         if len(results) != 0:
             logger.debug(f"[DB] PSOP loaded (id={psop_id})")
-            return PSOP.model_validate(json.loads(results[0][0]))
+            return _decode_psop(results[0][0])
         else:
             logger.warning(f"[DB] PSOP not found (id={psop_id})")
             return None
     finally:
-        conn.close()
+        close_resource(conn)
+
+
+def _decode_psop(content):
+    try:
+        return PSOP.model_validate(json.loads(content))
+    except (ValueError, TypeError) as exc:
+        raise StorageCorruptionError("Stored PSOP is invalid") from exc

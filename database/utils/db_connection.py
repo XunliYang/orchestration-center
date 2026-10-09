@@ -15,10 +15,8 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-import json
 import re
 import threading
-from pathlib import Path
 
 import psycopg2
 from loguru import logger
@@ -36,10 +34,12 @@ def validate_database_name(name: str) -> str:
     return name
 
 def read_db_config(file_name):
-    dir_path = Path(get_root_path()) / "etc" / "conf"
-    file_path = dir_path / file_name
-    with open(file_path, "r", encoding='utf-8') as f:
-        return json.load(f)
+    """Kept for call sites that still import this module; filenames from before
+    etc/conf/db are not runtime sources."""
+    from database.utils.connection_config import load_connection_config
+    if file_name not in {"db_config.json", "postgresql.json"}:
+        raise ValueError("Unsupported PostgreSQL config filename")
+    return load_connection_config("postgresql", get_root_path())
 
 class _ConnInfoHolder:
     """Thread-safe lazy holder for database connection info."""
@@ -101,6 +101,10 @@ def create_database_if_not_exists():
 
 def create_connection():
     try:
+        from database.utils.connection_provider import current_provider
+        provider = current_provider()
+        if provider is not None:
+            return provider.connection()
         if persistence_mode() == "mysql":
             from database.utils.mysql_connection import get_backend
             return get_backend().connection()
@@ -110,8 +114,11 @@ def create_connection():
         conn = psycopg2.connect(**conn_info)
         logger.info(f"Connected to database '{conn_info.get('database', 'unknown')}' on {conn_info.get('host', 'localhost')}:{conn_info.get('port', 5432)}")
         return conn
-    except Exception as e:
-        logger.error(f"Unable to connect to database: {e}")
+    except ValueError:
+        # Config errors must fail loudly, without embedding driver/config values.
+        raise
+    except Exception:
+        logger.error("Unable to connect to database")
         return None
 
 

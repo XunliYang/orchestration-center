@@ -44,6 +44,8 @@ from pydantic import BaseModel, Field
 
 from common.config import FLOW_CTL_START_PROCESS_STREAM, FLOW_CTL_PLAN, FLOW_CTL_GENERATE_PSOP, MAX_FILE_SIZE_BYTES
 from common.custom.default_handle import HandlerRegistry
+from orchestrate.persistence.errors import StorageError
+from orchestrate.server.storage_error_response import storage_http_exception
 from common.custom.interface_type import InterfaceType
 from orchestrate.core.intent_psop_generator import IntentPsopGenerator
 from orchestrate.core.model.preflow import PreFlow
@@ -188,6 +190,8 @@ async def orchestrate_sop(
         raise HTTPException(status_code=503, detail="Server is busy")
     except HTTPException:
         raise
+    except StorageError as e:
+        raise storage_http_exception(e) from e
     except Exception as e:
         logger.error(f"SOP orchestration failed: {e}")
         raise HTTPException(status_code=500, detail=str(e)) from e
@@ -230,6 +234,8 @@ async def orchestrate_intent(
         raise HTTPException(status_code=503, detail="Server is busy")
     except HTTPException:
         raise
+    except StorageError as e:
+        raise storage_http_exception(e) from e
     except Exception as e:
         logger.error(f"Intent orchestration failed: {e}")
         raise HTTPException(status_code=500, detail=str(e)) from e
@@ -259,6 +265,8 @@ async def get_psop(
         return ok(data=psop.model_dump(), message=f"PSOP {psop_id} retrieved")
     except HTTPException:
         raise
+    except StorageError as e:
+        raise storage_http_exception(e) from e
     except Exception as e:
         logger.error(f"Failed to get PSOP: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get PSOP: {e}") from e
@@ -285,6 +293,8 @@ async def search_workflows(
         return ok(data=[r.to_dict() for r in results], message=f"Found {len(results)} matching workflow(s)")
     except HTTPException:
         raise
+    except StorageError as e:
+        raise storage_http_exception(e) from e
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Search failed: {e}") from e
 
@@ -318,6 +328,8 @@ async def execute_workflow(
         raise HTTPException(status_code=503, detail="Server is busy")
     except HTTPException:
         raise
+    except StorageError as e:
+        raise storage_http_exception(e) from e
     except Exception as e:
         logger.error(f"Execution failed: {e}")
         raise HTTPException(status_code=500, detail=f"Workflow execution failed: {e}") from e
@@ -352,6 +364,8 @@ async def execute_psop_by_id(
         raise HTTPException(status_code=503, detail="Server is busy")
     except HTTPException:
         raise
+    except StorageError as e:
+        raise storage_http_exception(e) from e
     except Exception as e:
         logger.error(f"Execution by ID failed: {e}")
         raise HTTPException(status_code=500, detail=f"Workflow execution failed: {e}") from e
@@ -376,6 +390,8 @@ async def list_executions(
         return ok(data=records, message=f"Found {len(records)} execution record(s)")
     except HTTPException:
         raise
+    except StorageError as e:
+        raise storage_http_exception(e) from e
     except Exception as e:
         logger.error(f"Failed to list execution records: {e}")
         raise HTTPException(status_code=500, detail="Failed to list execution records") from e
@@ -396,6 +412,8 @@ async def get_execution(
         return ok(data=record.model_dump() if hasattr(record, 'model_dump') else record)
     except HTTPException:
         raise
+    except StorageError as e:
+        raise storage_http_exception(e) from e
     except Exception as e:
         logger.error(f"Failed to get execution record: {e}")
         raise HTTPException(status_code=500, detail="Failed to get execution record") from e

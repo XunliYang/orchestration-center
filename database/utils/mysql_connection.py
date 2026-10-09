@@ -9,14 +9,11 @@ transaction; close rolls it back and returns the dedicated connection to the
 pool. Pool exhaustion fails immediately rather than blocking a request forever.
 """
 
-import json
 import os
 import threading
-from pathlib import Path
 
 import pymysql
 from dbutils.pooled_db import PooledDB
-from dotenv import dotenv_values
 from loguru import logger
 
 from common.util.config_util import get_root_path
@@ -24,29 +21,8 @@ from database.utils.db_connection import validate_database_name
 
 
 def load_mysql_config() -> dict:
-    root = Path(get_root_path())
-    path = root / "etc" / "conf" / "mysql_config.json"
-    config = json.loads(path.read_text(encoding="utf-8")) if path.is_file() else {}
-    if not isinstance(config, dict):
-        raise ValueError("mysql_config.json must contain an object")
-    env = {**dotenv_values(root / ".env"), **os.environ}
-    names = {
-        "host": "MYSQL_HOST", "port": "MYSQL_PORT", "database": "MYSQL_DATABASE",
-        "user": "MYSQL_USER", "pool_min": "MYSQL_POOL_MIN", "pool_max": "MYSQL_POOL_MAX",
-        "connect_timeout": "MYSQL_CONNECT_TIMEOUT", "read_timeout": "MYSQL_READ_TIMEOUT",
-        "write_timeout": "MYSQL_WRITE_TIMEOUT", "ssl_ca": "MYSQL_SSL_CA",
-    }
-    for key, name in names.items():
-        if name in env:
-            config[key] = env[name]
-    password_env = config.get("password_env", "MYSQL_PASSWORD")
-    if not isinstance(password_env, str) or not password_env:
-        raise ValueError("password_env must name a password environment variable")
-    if password_env in env:
-        config["password"] = env[password_env]
-    elif "password" not in config:
-        raise ValueError(f"MySQL password variable {password_env} is not set")
-    return config
+    from database.utils.connection_config import load_connection_config
+    return load_connection_config("mysql", get_root_path())
 
 
 class MySQLBackend:
@@ -160,6 +136,10 @@ _lock = threading.Lock()
 
 
 def get_backend() -> MySQLBackend:
+    from database.utils.connection_provider import current_provider
+    provider = current_provider()
+    if provider is not None:
+        return provider.mysql_backend()
     global _backend
     with _lock:
         if _backend is None:

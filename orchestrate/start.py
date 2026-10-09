@@ -32,10 +32,17 @@ from common.util.cipher_util import DEFAULT_ENCODING
 from common.util.conf_util import get_conf_singleton, set_ssl_folder_permissions, load_cert_password
 from common.util.config_util import get_conf
 from common.util.persistence_mode import validate_storage_mode
-from database.utils.user_store import seed_admin_if_empty
-from orchestrate.persistence import build_context, configure_context
+from orchestrate.persistence import build_context, configure_context, current_context
 from orchestrate.server.frontend_support_server import app
 from orchestrate.server.security_preflight import SecurityPreflightError, security_preflight
+
+def seed_admin_if_empty(default_password):
+    """Bootstrap through the bound user port, not the process-global SQL helper."""
+    users = current_context().users
+    if users.has_any():
+        return False
+    return users.create("admin", default_password, "admin", True)
+
 
 def customized_create_ssl_context(certfile: str | os.PathLike[str],
                                   keyfile: str | os.PathLike[str] | None,

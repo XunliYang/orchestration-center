@@ -24,7 +24,7 @@ additional overrides the same way (:meth:`HandlerRegistry.register`).
 """
 
 from abc import ABC, abstractmethod
-from typing import Dict, Type
+from typing import Dict, Optional, Type
 
 from loguru import logger
 
@@ -59,28 +59,57 @@ class HandlerRegistry:
 
     _defaults: Dict[str, Type[BaseHandler]] = {}
     _overrides: Dict[str, Type[BaseHandler]] = {}
+    _bundled_overrides: Dict[str, Type[BaseHandler]] = {}
 
     @classmethod
     def register_default(cls, interface_type: InterfaceType, handler_class: Type[BaseHandler]) -> None:
         """Register the file-mode implementation for an interface type."""
-        cls._register_into(cls._defaults, interface_type, handler_class, slot="default")
+        cls._register_into(cls._defaults, interface_type, handler_class, slot="default", bundled=True)
 
     @classmethod
-    def register(cls, interface_type: InterfaceType, handler_class: Type[BaseHandler]) -> None:
+    def register(cls, interface_type: InterfaceType, handler_class: Type[BaseHandler],
+                 bundled: bool = False) -> None:
         """
         Register a database-mode (or third-party) implementation class.
 
         :param interface_type: Interface type identifier, e.g. ``SAVE_PSOP``
         :param handler_class: Custom class inheriting from BaseHandler
+        :param bundled: True for this repository's own handler (a built-in, not
+            an extension). Built-ins are marked so that
+            :meth:`get_extension_override` can tell them apart from a handler a
+            third party registered in their place.
         """
-        cls._register_into(cls._overrides, interface_type, handler_class, slot="override")
+        cls._register_into(cls._overrides, interface_type, handler_class, slot="override", bundled=bundled)
+
+    @classmethod
+    def get_extension_override(cls, interface_type: InterfaceType) -> Optional[Type[BaseHandler]]:
+        """The class an extension registered *in place of* the bundled handler.
+
+        Returns ``None`` when the slot still holds the bundled implementation or
+        is empty. A storage port calls this before using its own implementation:
+        an extension that replaced a query handler wins, and the bundled handler
+        is deliberately not returned, because invoking it would dispatch back
+        into the port that is asking (circular delegation).
+        """
+        key = interface_type.value
+        candidate = cls._overrides.get(key)
+        if candidate is None or candidate is cls._bundled_overrides.get(key):
+            return None
+        return candidate
 
     @classmethod
     def _register_into(cls, slot_map: Dict[str, Type[BaseHandler]], interface_type: InterfaceType,
-                       handler_class: Type[BaseHandler], slot: str) -> None:
+                       handler_class: Type[BaseHandler], slot: str, bundled: bool = False) -> None:
         if not issubclass(handler_class, BaseHandler):
             raise TypeError("handler_class must be a subclass of BaseHandler")
         slot_map[interface_type.value] = handler_class
+        if slot == "override":
+            # Identity belongs to this registration, never to an inheritable
+            # class attribute. Re-registering even the same class is an extension.
+            if bundled:
+                cls._bundled_overrides[interface_type.value] = handler_class
+            else:
+                cls._bundled_overrides.pop(interface_type.value, None)
 
     @classmethod
     def get_handler(cls, interface_type: InterfaceType) -> BaseHandler:

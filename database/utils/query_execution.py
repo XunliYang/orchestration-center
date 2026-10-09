@@ -23,8 +23,9 @@ def execute_query(conn, query, params=None):
         logger.error("Database connection is None")
         return None, RuntimeError("No database connection")
     query = query.strip()
-    cur = conn.cursor()
+    cur = None
     try:
+        cur = conn.cursor()
         cur.execute(query, params)
         if query.upper().strip().startswith("SELECT"):
             results = cur.fetchall()
@@ -33,11 +34,15 @@ def execute_query(conn, query, params=None):
             conn.commit()
             return None, None
     except Exception as error:
-        logger.error(f"DB error: {error}")
+        logger.error(f"Database operation failed ({type(error).__name__})")
         try:
             conn.rollback()
         except Exception:
             logger.warning("Database rollback failed; connection will be closed by the caller")
         return None, error
     finally:
-        cur.close()
+        if cur is not None:
+            try:
+                cur.close()
+            except Exception:
+                logger.warning("Database cursor cleanup failed; connection will be closed by the caller")

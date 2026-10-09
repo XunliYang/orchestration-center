@@ -19,6 +19,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from database.utils.query_execution import execute_query
+from orchestrate.persistence.errors import StorageError, StorageUnavailableError, StorageCorruptionError
 
 
 # ===========================================================================
@@ -132,7 +133,7 @@ class TestDbSaveExecutionRecord:
         record.execution_history = []
         record.model_dump_json.return_value = "{}"
         with patch("orchestrate.handlers.execution_record_processor.create_connection", return_value=mock_conn):
-            with pytest.raises(RuntimeError, match="Failed to save"):
+            with pytest.raises(StorageError, match="Failed to save"):
                 db_save_execution_record(record)
 
 
@@ -166,11 +167,11 @@ class TestDbListExecutionRecords:
             result = db_list_execution_records()
             assert result == []
 
-    def test_conn_none_returns_empty(self):
+    def test_conn_none_raises(self):
         from orchestrate.handlers.execution_record_processor import db_list_execution_records
         with patch("orchestrate.handlers.execution_record_processor.create_connection", return_value=None):
-            result = db_list_execution_records()
-            assert result == []
+            with pytest.raises(StorageUnavailableError):
+                db_list_execution_records()
 
     def test_datetimes_converted(self):
         from orchestrate.handlers.execution_record_processor import db_list_execution_records
@@ -196,9 +197,8 @@ class TestDbListExecutionRecords:
         ]
         mock_conn.cursor.return_value = mock_cur
         with patch("orchestrate.handlers.execution_record_processor.create_connection", return_value=mock_conn):
-            result = db_list_execution_records()
-            assert len(result) == 1
-            assert result[0]["error"] is None  # default on parse failure
+            with pytest.raises(StorageCorruptionError):
+                db_list_execution_records()
 
 
 # ===========================================================================
@@ -230,8 +230,8 @@ class TestDbGetExecutionRecord:
     def test_conn_none(self):
         from orchestrate.handlers.execution_record_processor import db_get_execution_record
         with patch("orchestrate.handlers.execution_record_processor.create_connection", return_value=None):
-            result = db_get_execution_record("e1")
-            assert result is None
+            with pytest.raises(StorageUnavailableError):
+                db_get_execution_record("e1")
 
 
 # ===========================================================================
@@ -263,15 +263,15 @@ class TestDbDeleteExecutionRecord:
     def test_conn_none(self):
         from orchestrate.handlers.execution_record_processor import db_delete_execution_record
         with patch("orchestrate.handlers.execution_record_processor.create_connection", return_value=None):
-            result = db_delete_execution_record("e1")
-            assert result is False
+            with pytest.raises(StorageUnavailableError):
+                db_delete_execution_record("e1")
 
-    def test_exception_returns_false(self):
+    def test_exception_raises(self):
         from orchestrate.handlers.execution_record_processor import db_delete_execution_record
         mock_conn = MagicMock()
         mock_cur = MagicMock()
-        mock_cur.execute.side_effect = Exception("conn lost")
+        mock_cur.execute.side_effect = ConnectionError("conn lost")
         mock_conn.cursor.return_value = mock_cur
         with patch("orchestrate.handlers.execution_record_processor.create_connection", return_value=mock_conn):
-            result = db_delete_execution_record("e1")
-            assert result is False
+            with pytest.raises(StorageUnavailableError):
+                db_delete_execution_record("e1")

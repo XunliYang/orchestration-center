@@ -38,9 +38,9 @@ docs/
 *.md
 !README.md
 
-# Environment (keep .env for A2A-T SDK base config, exclude sensitive overrides)
+# Secrets are injected at runtime, never uploaded with the build context.
+.env
 .env.*
-!.env
 
 # Frontend (not part of backend container)
 workflow-designer/node_modules/
@@ -50,3 +50,7 @@ workflow-designer/dist/
 wheelhouse/
 wheels/
 .gcloudignore
+.env.database-*
+etc/conf/db/*.json
+etc/conf/db_config.json
+etc/conf/mysql_config.json
