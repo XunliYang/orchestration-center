@@ -17,7 +17,7 @@
 
 """SQL backends (PostgreSQL and MySQL) behind the storage ports.
 
-Legacy SQL processors are called inside an instance-bound connection/dialect scope.
+The shared SQL processors are called inside an instance-bound connection/dialect scope.
 Connection settings resolve once, at first startup I/O; constructors remain offline.
 Both SQL brands share this class because the current code is already
 brand-agnostic at this level -- the brand-specific knowledge lives in

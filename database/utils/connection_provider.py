@@ -2,7 +2,7 @@
 # All Rights Reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Instance-bound SQL resources with a scoped adapter for legacy processors.
+"""Instance-bound SQL resources with a scoped adapter for the shared SQL processors.
 
 The context is reset after each operation (including exceptions), so concurrent
 requests/backends never inherit another instance's connection or SQL dialect.

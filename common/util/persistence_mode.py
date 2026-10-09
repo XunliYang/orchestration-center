@@ -19,8 +19,9 @@
 
 ``persistence_mode`` selects the workflow-storage backend: ``file`` (default)
 keeps JSON documents under ``data/workflow_storage/``; ``postgresql`` or ``mysql`` switches
-the pluggable handlers to the database-backed implementations (and, for legacy
-consumers such as the user store, whether the database is available at all).
+the pluggable handlers to the database-backed implementations (and, for consumers
+that reach the database outside those handlers, such as the user store, whether the
+database is available at all).
 
 Every check that used to compare the raw config string inline now goes through
 :meth:`is_db_mode`, so renaming the flag or adding a mode touches one file.
@@ -38,7 +39,7 @@ KNOWN_STORAGE_MODES = frozenset({"file", "postgresql", "mysql"})
 
 def persistence_mode() -> str:
     """Return the lowercased ``persistence_mode`` config value."""
-    # Legacy SQL helpers use the same instance-scoped dialect as the connection.
+    # The SQL helpers use the same instance-scoped dialect as the connection.
     from database.utils.connection_provider import current_provider
     provider = current_provider()
     if provider is not None:

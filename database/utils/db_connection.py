@@ -34,7 +34,8 @@ def validate_database_name(name: str) -> str:
     return name
 
 def read_db_config(file_name):
-    """Compatibility callable; legacy filenames are not runtime sources."""
+    """Kept for call sites that still import this module; filenames from before
+    etc/conf/db are not runtime sources."""
     from database.utils.connection_config import load_connection_config
     if file_name not in {"db_config.json", "postgresql.json"}:
         raise ValueError("Unsupported PostgreSQL config filename")
