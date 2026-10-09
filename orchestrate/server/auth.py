@@ -37,7 +37,7 @@ from starlette import status
 from starlette.responses import JSONResponse, Response
 
 from common.util.config_util import get_conf
-from common.util.persistence_mode import is_db_mode
+from orchestrate.persistence import current_context
 from orchestrate.server.response_utils import ok, error
 
 # Endpoints that must remain public even when auth is enabled.
@@ -111,9 +111,12 @@ def is_auth_enabled() -> bool:
         return False
 
     conf = get_conf()
-    if is_db_mode(conf):
-        from database.utils.user_store import has_any_user
-        return has_any_user()
+    storage = current_context()
+    if storage.has_users:
+        # Credentials live in the configured backend, which is what declares
+        # the user-store capability. The repository still raises when that
+        # store is unreachable, so callers keep failing closed.
+        return storage.users.has_any()
     # File mode: config-based auth
     return bool(conf.get("access_password", "").strip())
 
