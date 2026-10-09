@@ -173,6 +173,15 @@ class PersistenceBackend(ABC):
     def preflows(self) -> PreflowRepository:
         """Return the PreFlow repository."""
 
+    @abstractmethod
+    def psops_for(self, storage: Any) -> PsopRepository:
+        """Return a PSOP repository bound to a storage the caller already owns.
+
+        In file mode the returned repository reads that storage, not the
+        process-wide singleton; database backends ignore the argument. Keeping
+        this on the port is what lets a call site stay free of mode branches.
+        """
+
     def users(self) -> UserRepository:
         """Return the user repository; only backends with ``Capability.USERS`` do."""
         raise StorageValidationError(f"'{self.mode}' has no user store")

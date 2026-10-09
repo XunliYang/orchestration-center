@@ -167,3 +167,7 @@ class SqlPersistenceBackend(PersistenceBackend):
         from database.utils.db_connection import close_database
 
         close_database()
+
+    def psops_for(self, storage: Any = None) -> PsopRepository:
+        """Rows live in the database, so the storage argument is ignored."""
+        return self.psops()

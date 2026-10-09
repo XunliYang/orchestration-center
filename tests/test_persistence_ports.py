@@ -36,7 +36,9 @@ from orchestrate.persistence import (
     StorageUnavailableError,
     StorageValidationError,
     UserRepository,
+    configure_context,
     create_backend,
+    current_context,
     known_modes,
 )
 from orchestrate.persistence import factory
@@ -99,7 +101,7 @@ def test_ports_are_split_per_repository_and_stay_abstract():
     assert set(ExecutionRecordRepository.__abstractmethods__) == {"save", "get", "list_summaries", "delete"}
     assert set(PreflowRepository.__abstractmethods__) == {"save", "get", "list_ids", "delete"}
     assert set(PersistenceBackend.__abstractmethods__) == {
-        "check_ready", "initialize", "psops", "executions", "preflows", "close",
+        "check_ready", "initialize", "psops", "executions", "preflows", "psops_for", "close",
     }
 
 
@@ -193,3 +195,37 @@ def test_file_mode_does_not_import_a_database_driver():
     )
     assert completed.returncode == 0, completed.stderr
     assert "DRIVERS False False" in completed.stdout, completed.stdout
+
+
+def test_psops_for_binds_the_caller_owned_storage(tmp_path, sample_psop_dict):
+    # WorkflowRetrieval owns a storage of its own (injected in 25 tests). Its
+    # PSOPs must come from that storage, not from the process-wide singleton,
+    # which is why the port takes the storage instead of the caller branching
+    # on the mode.
+    owned = WorkflowStorage(str(tmp_path / "owned"))
+    context = StorageContext(FilePersistenceBackend(storage=WorkflowStorage(str(tmp_path / "other"))))
+    psop = PSOP.model_validate(sample_psop_dict)
+    owned.save_psop(psop)
+
+    repository = context.psops_for(owned)
+
+    assert [summary.workflow_id for summary in repository.list_summaries()] == [psop.id]
+    assert repository.get(psop.id).name == psop.name
+
+
+def test_sql_psops_for_ignores_the_storage_argument(tmp_path):
+    context = _sql_context(tmp_path)
+    assert isinstance(context.psops_for(WorkflowStorage(str(tmp_path / "elsewhere"))), PsopRepository)
+
+
+def test_current_context_defaults_to_file_and_can_be_configured(tmp_path, monkeypatch):
+    import orchestrate.persistence.context as context_module
+
+    monkeypatch.setattr(context_module, "_persistence_context", None)
+    # The app is a module-level FastAPI global that tests import directly, so an
+    # unconfigured process must still behave like the historical file default.
+    assert current_context().mode == "file"
+
+    configured = StorageContext(FilePersistenceBackend(storage=WorkflowStorage(str(tmp_path))))
+    assert configure_context(configured) is configured
+    assert current_context() is configured

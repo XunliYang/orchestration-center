@@ -149,3 +149,7 @@ class FilePersistenceBackend(PersistenceBackend):
 
     def close(self) -> None:
         """Nothing pooled; kept so callers can always call ``close()``."""
+
+    def psops_for(self, storage: WorkflowStorage) -> PsopRepository:
+        """Bind the PSOP repository to the storage the caller already owns."""
+        return _FilePsopRepository(storage)
