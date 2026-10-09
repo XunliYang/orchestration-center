@@ -116,8 +116,8 @@ The following scenarios require users to implement custom handlers:
 
 | Scenario | Description | Example |
 |----------|-------------|---------|
-| Database Persistence | When `persistence_mode` is configured as `postgresql`, the default file storage handler cannot meet requirements; a custom handler is needed for database storage integration | Using PostgreSQL to store PSOP and execution records |
-| Custom Storage Media | When using other storage media (e.g., MySQL, MongoDB, Redis), a custom handler is needed to implement the corresponding storage logic | Using MySQL as the PSOP storage backend |
+| Database Persistence | `persistence_mode=postgresql` or `mysql` selects the bundled SQL handlers | PSOP and execution records in PostgreSQL/MySQL |
+| Custom Storage Media | A backend not bundled by this service requires custom storage handlers | MongoDB or Redis storage integration |
 | Storage Logic Customization | When additional business logic needs to be added to save/query/delete operations, a custom handler is needed to extend default behavior | Adding audit logging when saving PSOP |
 
 **Configuration Notes:**
@@ -126,10 +126,11 @@ Configure the `persistence_mode` parameter in `etc/conf/server.conf`:
 
 ```properties
 persistence_mode=file  # Uses default file storage; no custom handler needed
-persistence_mode=postgresql  # Uses database storage; custom handler required
+persistence_mode=postgresql  # Uses bundled PostgreSQL handlers
+persistence_mode=mysql       # Uses bundled MySQL handlers (8.0.19+)
 ```
 
-When `persistence_mode` is set to a value other than `file`, the system will prioritize user-registered custom handlers.
+Database modes select registered SQL handlers; unsupported mode values are rejected at startup. MySQL setup and storage boundaries: [MySQL persistence](MySQL%20Persistence.md).
 
 #### 4.1.3 Development Steps
 Step 1: Import required modules
@@ -338,14 +339,14 @@ Backend report text is loaded from `orchestrate/sandbox/locales/{zh,en}.json`. T
 
 The internal API (`/rest/v1/orchestrate/*`) supports token-based authentication with two modes:
 
-**Database mode (`persistence_mode=postgresql`)**:
-- **User store**: `database/utils/user_store.py` -- CRUD operations on PostgreSQL `users` table with SHA-256 + per-user salt password hashing
+**Database mode (`persistence_mode=postgresql` or `mysql`)**:
+- **User store**: `database/utils/user_store.py` -- CRUD operations on PostgreSQL/MySQL `users` table with versioned bcrypt password hashes
 - **Auto-seed**: `start.py` calls `seed_admin_if_empty()` on startup to create default admin (password: `OpenAN@2026`)
 - **Registration**: `POST /auth/register` endpoint available, username format validated, password complexity checked on frontend
 - **User management**: `GET /auth/users` (list), `DELETE /auth/users/{username}` (delete, admin protected)
 - **Auth module**: `orchestrate/server/auth.py` -- `SessionStore` maps token to (username, expiry), `auth_middleware`
 - **Auth endpoints**: `POST /auth/login`, `POST /auth/register`, `POST /auth/logout`, `GET /auth/check`, `GET /auth/users`, `DELETE /auth/users/{username}`
-- **is_auth_enabled()**: Checks `persistence_mode` -- PostgreSQL mode queries `has_any_user()`, file mode checks `access_password` config
+- **is_auth_enabled()**: Checks `persistence_mode` -- PostgreSQL/MySQL mode queries `has_any_user()`, file mode checks `access_password` config
 
 **File mode (`persistence_mode=file`)**:
 - **Configuration**: Set `access_password` (SHA-256 hash) and `access_token_ttl` in `etc/conf/server.conf`

@@ -276,7 +276,7 @@ For deployment behind Nginx (recommended):
    python generate_access_password.py
    ```
 
-3. **Users and registration**: When `persistence_mode=postgresql`, the system automatically creates a default `admin` user (password: `OpenAN@2026`) on first startup. Self-registration is disabled by default; set `auth.register.enabled=true` in PostgreSQL mode to show the registration link. In `file` mode, registration is not available and only the `access_password` config is used.
+3. **Users and registration**: When `persistence_mode=postgresql` or `mysql`, the system automatically creates a default `admin` user (password: `OpenAN@2026`) on first startup. Self-registration is disabled by default; set `auth.register.enabled=true` in PostgreSQL/MySQL mode to show the registration link. In `file` mode, registration is not available and only the `access_password` config is used.
 
 ### High-Security Mode (mTLS + HTTPS + Login)
 
@@ -422,10 +422,10 @@ When executing a workflow, the system pushes execution progress in real time via
 
 2. **Login (if authentication is enabled)**
 
-   If `access_password` is configured or `persistence_mode=postgresql`, the login page is displayed. Enter your username and password to access the main interface.
+   If `access_password` is configured or database persistence (`postgresql`/`mysql`) is enabled, the login page is displayed. Enter your username and password to access the main interface.
 
-   - Default admin credentials: username `admin`, password `OpenAN@2026` (in PostgreSQL mode, the admin user is auto-created on first startup).
-   - To register a new account (PostgreSQL mode with `auth.register.enabled=true`), click the registration link on the login page.
+   - Default admin credentials: username `admin`, password `OpenAN@2026` (in PostgreSQL/MySQL mode, the admin user is auto-created on first startup).
+   - To register a new account (PostgreSQL/MySQL mode with `auth.register.enabled=true`), click the registration link on the login page.
    - In `file` mode, the username is `admin` and the password is the value set in `access_password` (before hashing).
    - To change the admin password in file mode, regenerate the hash: `python generate_access_password.py`
 

@@ -92,7 +92,7 @@ sequenceDiagram
         User->>FE: Click Save
         FE->>+BE: POST /rest/v1/orchestrate/workflows<br/>{psop: {...}}
         BE->>BE: Validate PSOP (Pydantic)
-        BE->>BE: Persist (File JSON / PostgreSQL)
+        BE->>BE: Persist (File JSON / PostgreSQL / MySQL)
         BE-->>-FE: {workflow_id: "..."}
         FE-->>User: Saved successfully
     end
@@ -141,9 +141,11 @@ sequenceDiagram
 | **Semantic Search** | Natural-language retrieval of previously built workflows |
 | **Dual API Layer** | Internal API (`/rest/v1/orchestrate/*`) for the frontend + External API (`/api/v1/*`) for third-party integration |
 | **SSE Streaming** | Real-time execution progress via 11 event types (init, start, agent_request, agent_response, psop_update, negotiation_request, negotiation_resolved, negotiation_failed, complete, error, close) |
-| **Pluggable Storage** | File-based JSON or PostgreSQL persistence via HandlerRegistry |
+| **Pluggable Storage** | File-based JSON, PostgreSQL or MySQL persistence via HandlerRegistry |
 | **Template Marketplace** | Pre-built workflow templates for telecom scenarios (live broadcast, energy saving, fault handling) |
 | **Sample Agents** | 3 sample A2A agents (Host Agent + two SPN domain agents) for testing and demonstration |
+
+MySQL setup, storage boundaries and container instructions: [MySQL persistence](docs/en/MySQL%20Persistence.md).
 
 ## Quick Start
 
@@ -384,10 +386,11 @@ The Orchestration Center provides multi-layer access control:
 
 The internal API (`/rest/v1/orchestrate/*`) is protected by token-based authentication. Two modes are supported depending on `persistence_mode`:
 
-**Database mode (`persistence_mode=postgresql`)**:
-- The plaintext password is sent to the backend (over TLS -- see below) and hashed there with SHA-256 + a per-user salt; the server never persists or compares a client-computed hash.
+**Database mode (`persistence_mode=postgresql` or `mysql`)**:
+
+- The plaintext password is sent to the backend over TLS and stored using versioned bcrypt hashes; legacy hashes are upgraded on successful login.
 - A default `admin` user (password: `OpenAN@2026`) is auto-created on first startup.
-- New users can self-register via the registration link on the login page.
+- Self-registration is disabled by default; explicitly set `auth.register.enabled=true` to enable it.
 - Passwords must be at least 8 characters and include at least two of: a digit, an uppercase letter, a lowercase letter, a special character. Enforced server-side (`common/util/password_util.validate_password_complexity`), not just in the UI.
 
 **File mode (`persistence_mode=file`)**:
@@ -443,7 +446,7 @@ For anything beyond the local demo, do not reuse these defaults:
 | `access_password` | SHA-256 hash of the login password (file mode only). **Empty means authentication is unconfigured, not disabled**: a startup check refuses to bind a non-loopback address with no credential while `enable_https=false` — see [Fail-closed startup](#fail-closed-startup). | empty (unconfigured) |
 | `security.dev_insecure_mode` | Local-demo exception to that check: permits a credential-less bind **only** on a loopback address. Authentication is genuinely off while it is set, so an audit entry is written at startup and `GET /health` echoes the flag. | `false` |
 | `access_token_ttl` | Session token lifetime in seconds. | `43200` (12h) |
-| `persistence_mode` | `postgresql` enables database-backed user management; `file` uses config-based auth. | `file` |
+| `persistence_mode` | `postgresql` or `mysql` enables database-backed user management; `file` uses config-based auth. | `file` |
 
 The frontend sends the password as-is; the backend is what hashes it (server-side, salted, for DB-mode accounts; against the configured SHA-256 in file mode). **This relies on `enable_https=true` for confidentiality in transit** -- see the TLS/HTTPS section below; don't run with the shipped `enable_https=false` default outside local development. The session token is a `Secure` (when `enable_https=true`), `HttpOnly`, `SameSite=Lax` cookie set on login -- it's not readable from JavaScript (mitigates XSS token theft) and the browser attaches it automatically, including on `EventSource`/SSE connections, so it's never carried in a URL or logged as a query param. `Authorization: Bearer <token>` is also accepted as a fallback for non-browser clients (curl, scripts).
 
@@ -524,10 +527,10 @@ The external API (`/api/v1/*`) is protected by mTLS at the TLS layer when `enabl
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | `POST` | `/rest/v1/orchestrate/auth/login` | Login with username + password, sets the session cookie |
-| `POST` | `/rest/v1/orchestrate/auth/register` | Register a new user (PostgreSQL mode only) |
+| `POST` | `/rest/v1/orchestrate/auth/register` | Register a new user (PostgreSQL/MySQL mode only) |
 | `POST` | `/rest/v1/orchestrate/auth/logout` | Revoke the session token and clear its cookie |
 | `GET` | `/rest/v1/orchestrate/auth/check` | Check if auth is required, token validity, and registration availability |
-| `GET` | `/rest/v1/orchestrate/auth/users` | List all users (PostgreSQL mode only) |
+| `GET` | `/rest/v1/orchestrate/auth/users` | List all users (PostgreSQL/MySQL mode only) |
 | `DELETE` | `/rest/v1/orchestrate/auth/users/{username}` | Delete a user (admin cannot be deleted) |
 
 ## Configuration
@@ -537,6 +540,7 @@ The external API (`/api/v1/*`) is protected by mTLS at the TLS layer when `enabl
 | `etc/conf/server.conf` | Server IP, port, TLS certificates, persistence mode, registry URL, access password, `client_verify_server` |
 | `etc/conf/server.properties` | TLS ciphers, rate limiting, connection limits |
 | `etc/conf/db_config.json` | PostgreSQL connection settings — gitignored; copy `etc/conf/db_config.json.template` to get started (only needed for `persistence_mode=postgresql`) |
+| `etc/conf/mysql_config.json` | MySQL connection settings — gitignored; copy its `.template`, inject `MYSQL_PASSWORD`, or use environment-only configuration; see [MySQL persistence](docs/en/MySQL%20Persistence.md) |
 | `.env` | Local model settings and A2A-T SDK settings — gitignored; production should inject secrets through its environment |
 | `etc/config/README_en.md` | LLM configuration guide |
 | `generate_selfsign_cert.py` | Self-signed certificate generator (RSA 3072) |
