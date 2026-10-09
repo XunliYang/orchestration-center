@@ -449,7 +449,9 @@ Update client trust material where required; do not overwrite the CA store used 
 1. Generate certificates (see above). For `serverAuth` the script already writes the deployment
    files expected by `server.conf` (`server.cer`, `trust.cer`, `server_key.pem`, `cert_pwd`);
    add `--plain-key` to also get the unencrypted `server_key_nopass.pem` for nginx. No manual
-   copying or password file creation is needed.
+   copying or password file creation is needed. The fallback password path is also
+   `etc/ssl/cert_pwd`. Existing raw/deployment files and client credentials are never overwritten.
+   `cert_pwd` is plaintext: protect the entire directory (service-account ACLs on Windows).
 
 2. Update `etc/conf/server.conf`:
    ```ini

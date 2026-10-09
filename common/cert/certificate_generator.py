@@ -102,7 +102,7 @@ class CertificateGenerator:
         key_file = f"server_key_{self.alg}.pem"
         cert_path = os.path.join(cert_dir, cert_file)
         key_path = os.path.join(cert_dir, key_file)
-        return os.path.exists(cert_path) or os.path.exists(key_path)
+        return os.path.lexists(cert_path) or os.path.lexists(key_path)
 
     def _generate_key(self) -> PrivateKeyTypes:
         if self.key_algorithm.upper() == 'RSA':
@@ -177,7 +177,8 @@ class CertificateGenerator:
 
         cert_file = f"server_{self.alg}.cer"
         cert_path = os.path.join(cert_dir, cert_file)
-        with open(cert_path, "wb") as f:
+        fd = os.open(cert_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(fd, "wb") as f:
             f.write(certificate.public_bytes(serialization.Encoding.PEM))
 
     def _save_encrypted_key_with_password(self, cert_dir: str, private_key: PrivateKeyTypes, password: str) -> None:
@@ -185,7 +186,8 @@ class CertificateGenerator:
 
         key_file = f"server_key_{self.alg}.pem"
         key_path = os.path.join(cert_dir, key_file)
-        with open(key_path, "wb") as f:
+        fd = os.open(key_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(fd, "wb") as f:
             f.write(private_key.private_bytes(
                 encoding=serialization.Encoding.PEM,
                 format=serialization.PrivateFormat.PKCS8,

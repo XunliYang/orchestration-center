@@ -337,6 +337,8 @@ SAN 必须与客户端 URL 的主机匹配，IP 必须使用 `--ip`，仅设置 
 1. 生成证书（见上方命令）。`serverAuth` 会直接产出 `server.conf` 期望的部署文件
    （`server.cer`、`trust.cer`、`server_key.pem`、`cert_pwd`）；加 `--plain-key` 还会额外
    生成 Nginx 使用的未加密私钥 `server_key_nopass.pem`。无需手工复制或创建密码文件。
+   口令默认路径也为 `etc/ssl/cert_pwd`；原始文件、部署副本和客户端文件均禁止覆盖。
+   `cert_pwd` 为明文，整个目录需按敏感凭据保护；Windows 使用服务账号 ACL 限权。
 
 2. 修改 `etc/conf/server.conf`：
    ```ini
