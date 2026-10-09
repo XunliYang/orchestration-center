@@ -26,6 +26,59 @@ from unittest.mock import patch, MagicMock
 from orchestrate.solution_package.manager import SolutionPackageManager
 
 
+DEMO_PACKAGE = "IG1526A_AN_L4_Wireless_Energy_Efficiency_Optimization_Solution_Package_v1.0.0"
+
+
+def test_bundled_demo_record_matches_canonical_sample_and_original_pdf():
+    """The tracked runtime seed must not diverge from the sample seed from main."""
+    root = Path(__file__).resolve().parents[1]
+    runtime_seed = root / "data" / "solution_packages" / f"{DEMO_PACKAGE}.json"
+    canonical_seed = root / "samples" / "solution_packages" / f"{DEMO_PACKAGE}.json"
+    record = json.loads(runtime_seed.read_text(encoding="utf-8"))
+    assert record == json.loads(canonical_seed.read_text(encoding="utf-8"))
+    assert record["pdf_filename"] == f"{DEMO_PACKAGE}.pdf"
+    assert record["chapter_count"] == len(record["chapters"]) == 13
+    with runtime_seed.with_suffix(".pdf").open("rb") as pdf:
+        assert pdf.read(5) == b"%PDF-"
+
+
+def test_default_demo_seeding_keeps_custom_storage_empty_and_existing_imports_intact(tmp_path, monkeypatch):
+    """Resolve the rebase conflict without dropping main's deployment isolation."""
+    from orchestrate.solution_package import manager as manager_module
+
+    root = Path(__file__).resolve().parents[1]
+    monkeypatch.setattr(manager_module, "__file__",
+                        str(tmp_path / "orchestrate" / "solution_package" / "manager.py"))
+    monkeypatch.delenv("TESTING", raising=False)
+    seeds = tmp_path / "samples" / "solution_packages"
+    seeds.mkdir(parents=True)
+    shutil.copyfile(root / "samples" / "solution_packages" / f"{DEMO_PACKAGE}.json",
+                    seeds / f"{DEMO_PACKAGE}.json")
+
+    custom = SolutionPackageManager(storage_dir=str(tmp_path / "custom"))
+    assert custom.retrieve_all() == []
+    default = SolutionPackageManager()
+    assert default.storage_dir == tmp_path / "data" / "solution_packages"
+    assert default.retrieve_by_filename(f"{DEMO_PACKAGE}.pdf")["chapter_count"] == 13
+
+    existing = default.storage_dir / f"{DEMO_PACKAGE}.json"
+    existing.write_text('{"pdf_filename":"operator.pdf","chapters":{}}', encoding="utf-8")
+    SolutionPackageManager()
+    assert json.loads(existing.read_text(encoding="utf-8"))["pdf_filename"] == "operator.pdf"
+
+
+def test_testing_mode_disables_default_demo_copy(tmp_path, monkeypatch):
+    from orchestrate.solution_package import manager as manager_module
+
+    monkeypatch.setattr(manager_module, "__file__",
+                        str(tmp_path / "orchestrate" / "solution_package" / "manager.py"))
+    monkeypatch.setenv("TESTING", "true")
+    seeds = tmp_path / "samples" / "solution_packages"
+    seeds.mkdir(parents=True)
+    (seeds / "demo.json").write_text("{}", encoding="utf-8")
+    assert SolutionPackageManager().retrieve_all() == []
+
+
 @pytest.fixture
 def temp_storage_dir():
     """Create temporary storage directory"""
