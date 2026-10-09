@@ -434,4 +434,4 @@ workflow-engine 不初始化已废弃的协商状态机。上述配置与上文�
 本项目基于 **Apache License 2.0** 开源协议。详见 [LICENSE](LICENSE)。
 
 
-数据库连接统一使用 `etc/conf/db/` 模板，密码由 `.env` / 环境变量引用；参见 [Database configuration / 数据库配置](docs/database-configuration.md)。旧连接配置需要显式迁移，不再作为运行时来源。
+数据库连接统一使用 `etc/conf/db/` 模板，密码由 `.env` / 环境变量引用；参见 [Database configuration / 数据库配置](docs/database-configuration.md)。旧连接配置不再作为运行时来源。
