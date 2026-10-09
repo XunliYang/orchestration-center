@@ -79,11 +79,21 @@ class TestLoginFileMode:
         assert exc_info.value.status_code == 401
 
 
+from orchestrate.persistence import StorageContext
+from orchestrate.persistence.sql_backend import SqlPersistenceBackend
+
+
+def _database_context():
+    """A database context for the register gate; building it opens no connection."""
+    return StorageContext(SqlPersistenceBackend(mode="postgresql"))
+
+
 @pytest.mark.anyio
 class TestRegisterComplexity:
     async def test_rejects_password_with_single_character_type(self, monkeypatch):
         monkeypatch.setattr(srv, "get_conf", lambda: {
             "persistence_mode": "postgresql", "auth.register.enabled": "true"})
+        monkeypatch.setattr(srv, "current_context", _database_context)
         with pytest.raises(HTTPException) as exc_info:
             await srv.register(srv.RegisterRequest(username="alice", password="aaaaaaaa"))
         assert exc_info.value.status_code == 400
@@ -92,6 +102,7 @@ class TestRegisterComplexity:
     async def test_accepts_password_meeting_complexity(self, monkeypatch):
         monkeypatch.setattr(srv, "get_conf", lambda: {
             "persistence_mode": "postgresql", "auth.register.enabled": "true"})
+        monkeypatch.setattr(srv, "current_context", _database_context)
         with patch("database.utils.user_store.user_exists", return_value=False), \
              patch("database.utils.user_store.create_user", return_value=True) as mock_create:
             result = await srv.register(srv.RegisterRequest(username="alice", password="Str0ngPass"))

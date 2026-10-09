@@ -60,6 +60,7 @@ from orchestrate.agentcard_loader import _normalize_agent_dict
 from common.log.audit_logger import audit_logger, OperationObject, OperationName, LogLevel, OperationResult
 from common.util.config_util import get_conf
 from common.util.persistence_mode import is_db_mode
+from orchestrate.persistence import current_context
 from common.util.password_hash import FILE_HASH_PREFIX, hash_password, verify_legacy_bcrypt, verify_password
 from orchestrate.core.model.preflow import PreFlow
 from orchestrate.core.model.psop import PSOP
@@ -255,7 +256,11 @@ class RegisterRequest(BaseModel):
 
 
 def _registration_enabled(conf: dict) -> bool:
-    return (is_db_mode(conf)
+    # A capability question, not a mode question: only a backend that can hold
+    # users may offer self-registration. current_context() falls back to the
+    # file backend when the composition root has not run (tests import the app
+    # directly), and that backend declares no user store.
+    return (current_context().has_users
             and str(conf.get("auth.register.enabled", False)).lower() in ("true", "1", "yes"))
 
 
@@ -305,8 +310,6 @@ async def register(request: RegisterRequest):
     conf = get_conf()
     if not _registration_enabled(conf):
         raise HTTPException(status_code=403, detail="Self-registration is disabled")
-    if not is_db_mode(conf):
-        raise HTTPException(status_code=400, detail="Registration requires database persistence mode")
     if not re.fullmatch(r"^[a-zA-Z][a-zA-Z0-9_-]{2,63}$", request.username):
         raise HTTPException(status_code=400, detail="Username must start with a letter and contain only letters, digits, underscores or hyphens (3-64 chars)")
     from common.util.password_util import validate_password_complexity
