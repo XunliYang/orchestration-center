@@ -345,7 +345,13 @@ python -m generate_selfsign_cert etc/ssl serverAuth --plain-key
 | `server_key_nopass.pem` | Unencrypted key (with `--plain-key`), for Nginx and the Host Agent |
 | `server_RSA.cer` / `server_key_RSA.pem` | Copies under the original raw names, kept for compatibility |
 
-The private key password is entered at an interactive prompt and never reaches shell history. The main backend reads `etc/conf/cert_pwd` by default; set `ssl_keyfile_password=etc/ssl/cert_pwd` in `server.conf` or copy the file to `etc/conf/`.
+The password is entered interactively, never as a shell argument. The backend defaults to
+`etc/ssl/cert_pwd`, matching the generated path. For another directory, configure all four
+`ssl_*` paths explicitly. Existing outputs are never overwritten. The password file is plaintext;
+protect it together with the private keys and use service-account ACLs on Windows.
+
+For separate signing test material, run `python -m generate_selfsign_cert etc/sign_cert dataSigning`.
+This exports `sign.cer`, `sign_key.pem` and `cert_pwd`; it does not enable or change business signing.
 
 For production, use certificates from a trusted CA (Let's Encrypt, Alibaba Cloud SSL, or enterprise CA).
 

@@ -399,7 +399,12 @@ Update client trust material where required; do not overwrite the CA store used 
 1. Generate certificates (see above). For `serverAuth` the command already produces the deployment
    files expected by `server.conf` (`server.cer`, `trust.cer`, `server_key.pem`, `cert_pwd`);
    `--plain-key` additionally writes the unencrypted `server_key_nopass.pem` for nginx — no manual
-   copying or password file creation needed.
+   copying or password file creation needed. The default password path is `etc/ssl/cert_pwd`.
+   All existing outputs, including passwords and client credentials, are protected from overwrite.
+   Rotate into a new directory, reissue client certificates and redistribute trust.
+   Protect the plaintext password together with the keys; use service-account ACLs on Windows.
+   For separate signing test material run `python -m generate_selfsign_cert etc/sign_cert dataSigning`:
+   it exports `sign.cer`, `sign_key.pem` and `cert_pwd`, without enabling business signing.
 
 2. Set `enable_https=true` in `etc/conf/server.conf`. Set `verify_client=true` for mTLS.
 

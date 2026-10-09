@@ -38,6 +38,10 @@ For serverAuth, deployment-ready files are produced alongside the raw ones:
     server_key.pem   encrypted private key (copy of server_key_RSA.pem)
     cert_pwd         key password without trailing newline
 
+dataSigning writes sign.cer, sign_key.pem and cert_pwd in a separate directory
+(e.g. etc/sign_cert), retaining the RSA-suffixed files for compatibility.
+Existing raw files, deployment files and client credentials are never overwritten.
+
 With --plain-key, server_key_nopass.pem (unencrypted key) is also written for
 nginx and agent servers, which cannot decrypt the encrypted key themselves.
 Protect it: it is written with owner-only permissions on Linux.
@@ -52,9 +56,9 @@ Linux). The name "dev-proxy" is what the vite dev proxy picks up
 automatically (etc/ssl/dev-proxy-client.cer / .key; restart vite after
 issuing). The password is read from cert_pwd — no interaction needed.
 
-The main backend reads the key password from etc/conf/cert_pwd by default
-(ssl_keyfile_password in server.conf); copy cert_pwd there or point the
-setting at cert_dir/cert_pwd.
+The main backend reads the key password from etc/ssl/cert_pwd by default
+(ssl_keyfile_password in server.conf). For another directory, configure
+all four TLS paths explicitly.
 """
 
 import argparse
@@ -62,7 +66,6 @@ import datetime
 import os
 import platform
 import re
-import shutil
 import stat
 import sys
 
@@ -73,6 +76,8 @@ SERVER_CER = "server.cer"
 TRUST_CER = "trust.cer"
 SERVER_KEY = "server_key.pem"
 CERT_PWD = "cert_pwd"
+SIGN_CER = "sign.cer"
+SIGN_KEY = "sign_key.pem"
 PLAIN_KEY = "server_key_nopass.pem"
 NAME_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9-]*")
 
@@ -82,46 +87,74 @@ def _owner_only(path: str) -> None:
         os.chmod(path, stat.S_IRUSR | stat.S_IWUSR)
 
 
-def _write_deploy_files(cert_dir: str, password: str, plain_key: bool) -> list[str]:
-    """Copy the generated key material to the deployment file names.
+def _require_new_paths(paths: list[str]) -> None:
+    """Refuse all existing entries, including directories and dangling symlinks."""
+    existing = [path for path in paths if os.path.lexists(path)]
+    if existing:
+        raise FileExistsError("The tool refuses to overwrite: " + ", ".join(existing)
+                              + "; generate into a different directory.")
 
-    server.cer/trust.cer/server_key.pem/cert_pwd are the names the backend
-    defaults to (conf_obj.DEFAULT_SSL_*); with plain_key an additional
-    unencrypted server_key_nopass.pem is written for nginx and agent servers.
+
+def _write_new_files(contents: dict[str, bytes]) -> list[str]:
+    """Create owner-only files exclusively; remove only our partial new bundle."""
+    _require_new_paths(list(contents))
+    created = []
+    try:
+        for path, data in contents.items():
+            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            created.append(path)
+            with os.fdopen(fd, "wb") as stream:
+                stream.write(data)
+            _owner_only(path)
+    except Exception:
+        for path in created:
+            os.unlink(path)
+        raise
+    return created
+
+
+def _deployment_names(cert_usage: str, plain_key: bool = False) -> list[str]:
+    if cert_usage not in ("serverAuth", "dataSigning"):
+        raise ValueError("Certificate usage must be serverAuth or dataSigning")
+    if cert_usage == "dataSigning" and plain_key:
+        raise ValueError("--plain-key applies only to serverAuth certificates")
+    if cert_usage == "serverAuth":
+        names = [SERVER_CER, TRUST_CER, SERVER_KEY, CERT_PWD]
+        if plain_key:
+            names.append(PLAIN_KEY)
+        return names
+    return [SIGN_CER, SIGN_KEY, CERT_PWD]
+
+
+def _write_deploy_files(cert_dir: str, password: str, plain_key: bool,
+                        cert_usage: str = "serverAuth") -> list[str]:
+    """Export TLS or signing material and its raw password, without overwriting.
+
+    TLS and dataSigning must use separate directories. cert_pwd is plaintext
+    for compatibility with both TLS password loading and AgentCardSigner.
+    Protect the whole directory as a credential, not just the encrypted key.
     """
     from cryptography.hazmat.primitives import serialization
 
-    raw_cert = os.path.join(cert_dir, "server_RSA.cer")
-    raw_key = os.path.join(cert_dir, "server_key_RSA.pem")
-    server_cer = os.path.join(cert_dir, SERVER_CER)
-    trust_cer = os.path.join(cert_dir, TRUST_CER)
-    server_key = os.path.join(cert_dir, SERVER_KEY)
-
-    shutil.copyfile(raw_cert, server_cer)
-    shutil.copyfile(raw_cert, trust_cer)
-    shutil.copyfile(raw_key, server_key)
-    _owner_only(server_key)
-
-    pwd_path = os.path.join(cert_dir, CERT_PWD)
-    with open(pwd_path, "w", encoding="utf-8", newline="") as f:
-        f.write(password)
-    _owner_only(pwd_path)
-
-    written = [server_cer, trust_cer, server_key, pwd_path]
-
-    if plain_key:
-        with open(raw_key, "rb") as f:
-            key = serialization.load_pem_private_key(f.read(), password=password.encode("utf-8"))
-        nopass_path = os.path.join(cert_dir, PLAIN_KEY)
-        with open(nopass_path, "wb") as f:
-            f.write(key.private_bytes(
-                encoding=serialization.Encoding.PEM,
-                format=serialization.PrivateFormat.TraditionalOpenSSL,
-                encryption_algorithm=serialization.NoEncryption(),
-            ))
-        _owner_only(nopass_path)
-        written.append(nopass_path)
-    return written
+    paths = [os.path.join(cert_dir, name) for name in _deployment_names(cert_usage, plain_key)]
+    _require_new_paths(paths)
+    with open(os.path.join(cert_dir, "server_RSA.cer"), "rb") as stream:
+        cert_data = stream.read()
+    with open(os.path.join(cert_dir, "server_key_RSA.pem"), "rb") as stream:
+        key_data = stream.read()
+    key = serialization.load_pem_private_key(key_data, password=password.encode("utf-8"))
+    if cert_usage == "serverAuth":
+        contents = {paths[0]: cert_data, paths[1]: cert_data,
+                    paths[2]: key_data, paths[3]: password.encode("utf-8")}
+        if plain_key:
+            contents[paths[4]] = key.private_bytes(
+                serialization.Encoding.PEM,
+                serialization.PrivateFormat.TraditionalOpenSSL,
+                serialization.NoEncryption(),
+            )
+    else:
+        contents = {paths[0]: cert_data, paths[1]: key_data, paths[2]: password.encode("utf-8")}
+    return _write_new_files(contents)
 
 
 def issue_client_cert(cert_dir: str, name: str) -> tuple[str, str]:
@@ -137,6 +170,11 @@ def issue_client_cert(cert_dir: str, name: str) -> tuple[str, str]:
     from cryptography.hazmat.primitives.asymmetric import rsa
     from cryptography.x509.oid import ExtendedKeyUsageOID, NameOID
 
+    if not NAME_PATTERN.fullmatch(name):
+        raise ValueError("client certificate name may contain letters, digits and dashes only")
+    cert_path = os.path.join(cert_dir, f"{name}-client.cer")
+    key_path = os.path.join(cert_dir, f"{name}-client.key")
+    _require_new_paths([cert_path, key_path])
     raw_cert = os.path.join(cert_dir, "server_RSA.cer")
     raw_key = os.path.join(cert_dir, "server_key_RSA.pem")
     pwd_path = os.path.join(cert_dir, CERT_PWD)
@@ -155,6 +193,13 @@ def issue_client_cert(cert_dir: str, name: str) -> tuple[str, str]:
     with open(raw_key, "rb") as f:
         ca_key = serialization.load_pem_private_key(f.read(), password=password.encode("utf-8"))
 
+    constraints = ca_cert.extensions.get_extension_for_class(x509.BasicConstraints).value
+    usage = ca_cert.extensions.get_extension_for_class(x509.KeyUsage).value
+    if not constraints.ca or not usage.key_cert_sign:
+        raise ValueError("existing certificate cannot issue client certificates; generate serverAuth first")
+    if ca_cert.public_key().public_numbers() != ca_key.public_key().public_numbers():
+        raise ValueError("server certificate and private key do not match")
+
     client_key = rsa.generate_private_key(public_exponent=65537, key_size=3072)
     now = datetime.datetime.now(datetime.UTC)
     cert = (x509.CertificateBuilder()
@@ -163,22 +208,19 @@ def issue_client_cert(cert_dir: str, name: str) -> tuple[str, str]:
             .public_key(client_key.public_key())
             .serial_number(x509.random_serial_number())
             .not_valid_before(now)
-            .not_valid_after(now + datetime.timedelta(days=3650))
+            .not_valid_after(min(now + datetime.timedelta(days=3650), ca_cert.not_valid_after_utc))
             .add_extension(x509.BasicConstraints(ca=False, path_length=None), critical=True)
             .add_extension(x509.ExtendedKeyUsage([ExtendedKeyUsageOID.CLIENT_AUTH]), critical=False)
             .sign(ca_key, hashes.SHA256()))
 
-    cert_path = os.path.join(cert_dir, f"{name}-client.cer")
-    key_path = os.path.join(cert_dir, f"{name}-client.key")
-    with open(cert_path, "wb") as f:
-        f.write(cert.public_bytes(serialization.Encoding.PEM))
-    with open(key_path, "wb") as f:
-        f.write(client_key.private_bytes(
+    _write_new_files({
+        cert_path: cert.public_bytes(serialization.Encoding.PEM),
+        key_path: client_key.private_bytes(
             serialization.Encoding.PEM,
             serialization.PrivateFormat.PKCS8,
             serialization.NoEncryption(),
-        ))
-    _owner_only(key_path)
+        ),
+    })
     return cert_path, key_path
 
 
@@ -194,7 +236,7 @@ def generate_self_signed_cert(cert_dir: str, cert_usage: str, password: str, *,
             return True
         else:
             existing = [name for name in ("server_RSA.cer", "server_key_RSA.pem")
-                        if os.path.exists(os.path.join(cert_dir, name))]
+                        if os.path.lexists(os.path.join(cert_dir, name))]
             if existing:
                 print(f"Failed: certificate files already exist in {cert_dir}: "
                       f"{', '.join(existing)}")
@@ -254,29 +296,42 @@ def main():
               "pointing at trust.cer.")
         sys.exit(0)
 
+    try:
+        names = ["server_RSA.cer", "server_key_RSA.pem"] + _deployment_names(args.cert_usage, args.plain_key)
+        _require_new_paths([os.path.join(args.cert_dir, name) for name in names])
+    except FileExistsError as exc:
+        print(f"Error: {exc}")
+        sys.exit(1)
+
     password = input_password_with_validation("Enter private key password")
     if password != password.strip():
         parser.error("private key password must not start or end with whitespace")
+    if password.startswith("enc:v1:"):
+        parser.error("private key password must not start with reserved config-cipher prefix enc:v1:")
 
     if not generate_self_signed_cert(args.cert_dir, args.cert_usage, password,
                                      dns_names=args.dns, ip_addresses=args.ip):
         sys.exit(1)
 
+    try:
+        written = _write_deploy_files(args.cert_dir, password, plain_key=args.plain_key,
+                                      cert_usage=args.cert_usage)
+    except Exception as e:
+        print(f"Error writing deployment files: {e}")
+        sys.exit(1)
+    print("Deployment-ready files written:")
+    for path in written:
+        print(f"  {path}")
     if args.cert_usage == "serverAuth":
-        try:
-            written = _write_deploy_files(args.cert_dir, password, plain_key=args.plain_key)
-        except Exception as e:
-            print(f"Error writing deployment files: {e}")
-            sys.exit(1)
-        print("Deployment-ready files written:")
-        for path in written:
-            print(f"  {path}")
-        print("Note: the backend reads the key password from etc/conf/cert_pwd by default; "
-              f"copy {CERT_PWD} there or set ssl_keyfile_password in server.conf to "
-              f"{args.cert_dir}/{CERT_PWD}.")
+        print("TLS defaults use etc/ssl/server.cer, server_key.pem, cert_pwd and trust.cer. "
+              "For another directory, set all four ssl_* paths in server.conf.")
         if not args.plain_key:
-            print("Note: nginx needs the unencrypted key; rerun with --plain-key or export it with "
-                  "`openssl rsa -in server_key.pem -out server_key_nopass.pem -passin pass:<password>`.")
+            print("For nginx, select --plain-key when generating into a new directory.")
+    else:
+        print("Separate signing material: sign.cer, sign_key.pem and cert_pwd. "
+              "Configure these paths in your signing consumer; generation does not enable signing.")
+    print("cert_pwd stores the plaintext password. Keep the directory private; never commit it. "
+          "On Windows restrict access using the service account's ACL.")
     sys.exit(0)
 
 
