@@ -166,6 +166,7 @@ def test_sql_backend_reuses_the_file_preflow_port(tmp_path):
 
 
 def test_sql_backend_delegates_to_the_current_processors_and_user_store(monkeypatch, tmp_path, sample_psop_dict):
+    monkeypatch.setattr(persistence_mode, "get_conf", lambda: {"persistence_mode": "mysql"})
     from database.utils import user_store
     from orchestrate.handlers import psop_processor as psops
 

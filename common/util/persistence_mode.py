@@ -38,6 +38,11 @@ KNOWN_STORAGE_MODES = frozenset({"file", "postgresql", "mysql"})
 
 def persistence_mode() -> str:
     """Return the lowercased ``persistence_mode`` config value."""
+    # Legacy SQL helpers use the same instance-scoped dialect as the connection.
+    from database.utils.connection_provider import current_provider
+    provider = current_provider()
+    if provider is not None:
+        return provider.mode
     return str(get_conf().get("persistence_mode", DEFAULT_STORAGE_MODE)).lower()
 
 
