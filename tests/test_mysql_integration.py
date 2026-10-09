@@ -32,6 +32,27 @@ pytestmark = pytest.mark.skipif(not os.environ.get("ORCH_MYSQL_TEST_HOST"),
                                 reason="Explicit disposable MySQL test server not configured")
 
 
+def _open_backend(attempts: int = 10, delay: float = 2.0):
+    """Open the MySQL backend, waiting out a server that is not serving yet.
+
+    A container healthcheck proves that mysqld answers, not that it accepts an
+    authenticated handshake: connecting during that window fails inside the
+    driver, while the same call succeeds seconds later. Retry a bounded number
+    of times so the suite reports the real error instead of flaking, and always
+    release a half-built backend before trying again.
+    """
+    last_error = None
+    for attempt in range(max(1, attempts)):
+        try:
+            return mysql_connection.get_backend()
+        except Exception as error:
+            last_error = error
+            mysql_connection.close_backend()
+            if attempt + 1 < attempts:
+                time.sleep(delay)
+    raise last_error
+
+
 @pytest.fixture
 def live_mysql(monkeypatch):
     from common.util import persistence_mode
@@ -49,7 +70,7 @@ def live_mysql(monkeypatch):
     monkeypatch.setattr(mysql_connection, "_backend", None)
     monkeypatch.setattr(user_store, "_any_user_exists_cache", False)
     try:
-        backend = mysql_connection.get_backend()
+        backend = _open_backend()
         backend.create_tables()
         yield config, backend
     finally:
