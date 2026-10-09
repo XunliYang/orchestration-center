@@ -118,6 +118,7 @@ class TestRegisterComplexity:
 class TestChangePasswordDbMode:
     async def test_rejects_weak_new_password(self, monkeypatch):
         monkeypatch.setattr(srv, "get_conf", lambda: {"persistence_mode": "postgresql"})
+        monkeypatch.setattr(srv, "current_context", _database_context)
         store = srv.get_session_store()
         token, _ = store.create("alice")
         try:
@@ -130,6 +131,7 @@ class TestChangePasswordDbMode:
 
     async def test_accepts_strong_new_password(self, monkeypatch):
         monkeypatch.setattr(srv, "get_conf", lambda: {"persistence_mode": "postgresql"})
+        monkeypatch.setattr(srv, "current_context", _database_context)
         store = srv.get_session_store()
         token, _ = store.create("alice")
         try:
