@@ -171,11 +171,19 @@ class TestCustomUvicornServer:
         assert server.conf_obj is conf_obj
 
     def test_run_http_disabled(self):
-        """When enable_https=false, main() calls uvicorn.run directly."""
+        """When enable_https=false, main() calls uvicorn.run directly.
+
+        ip=127.0.0.1 with no credential is the credential-less loopback cell, which
+        the fail-closed startup check (security_preflight) only lets through with
+        security.dev_insecure_mode=true -- see tests/test_security_preflight.py.
+        """
         from orchestrate.start import main
         with patch("orchestrate.start.get_conf") as mock_conf, \
              patch("orchestrate.start.uvicorn") as mock_uvicorn:
-            mock_conf.return_value = {"enable_https": "false", "ip": "127.0.0.1", "port": "5001"}
+            mock_conf.return_value = {
+                "enable_https": "false", "ip": "127.0.0.1", "port": "5001",
+                "security.dev_insecure_mode": "true",
+            }
             main()
             mock_uvicorn.run.assert_called_once()
 

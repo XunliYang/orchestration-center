@@ -167,6 +167,11 @@ source .venv/bin/activate      # Linux
 # .venv\Scripts\activate       # Windows
 pip install -r requirements.txt
 
+# The backend refuses to start without a credential unless it is explicitly
+# told this is a local demo -- see "Fail-closed startup" below.
+python generate_access_password.py      # writes access_password into etc/conf/server.conf
+# (alternative, no login at all, loopback only: security.dev_insecure_mode=true)
+
 # Start backend (port 5001)
 python -m orchestrate.start
 
@@ -390,6 +395,41 @@ The internal API (`/rest/v1/orchestrate/*`) is protected by token-based authenti
 - Username is fixed as `admin`.
 - Registration is not available.
 
+### Fail-closed startup
+
+The external API (`/api/v1/*`) has no application-layer guard -- the auth middleware
+covers `/rest/v1/orchestrate` and the `/psops` alias only -- so with `enable_https=false`
+those routes have neither mTLS nor a token check. A startup check
+(`orchestrate/server/security_preflight.py`) therefore evaluates the deployment before
+the server binds:
+
+| `enable_https` | Credential configured | Bind address | Outcome |
+|---|---|---|---|
+| `true` | any | any | start |
+| `false` | yes | any | start, with a warning that the transport is plaintext |
+| `false` | no | loopback | start **only** with `security.dev_insecure_mode=true` |
+| `false` | no | non-loopback | **refused**, with the two ways to fix it |
+
+The shipped `etc/conf/server.conf` has `enable_https=false` and an empty
+`access_password`, and the image defaults (`Dockerfile`,
+`docker-compose.yml`) bind `0.0.0.0` -- so a container that is not given a
+credential is refused at startup rather than starting open. To run the backend,
+pick one of the two ways:
+
+1. **Configure a credential** (required for anything reachable from off-host):
+   set `access_password` with `python generate_access_password.py`, or point
+   `admin_initial_password_file` at an existing file, or export
+   `OC_ADMIN_INITIAL_PASSWORD`. With `enable_https=false` the password and session
+   token travel in cleartext, so enable HTTPS for anything but a local run.
+2. **Bind a loopback address** (`ip=127.0.0.1`) if the instance is only reachable
+   locally. A credential-less loopback bind still needs
+   `security.dev_insecure_mode=true`; it disables authentication for every route and
+   is meant for local demos. The flag is echoed by `GET /health` so an instance
+   started this way is visible from outside, and an audit entry is written at startup.
+
+`security.dev_insecure_mode=true` does **not** lift the refusal for a non-loopback
+bind -- there the exposure is real regardless of who set the flag.
+
 ### Sample Agent Credentials
 
 The bundled sample agents authenticate against **localhost-only demo endpoints** using platform factory-default credentials committed in `samples/agent_credentials.json`. This file exists so the demo topology works out of the box; it is read by the sample agents, not by the orchestration backend.
@@ -400,7 +440,8 @@ For anything beyond the local demo, do not reuse these defaults:
 
 | Config Key | Description | Default |
 |------------|-------------|---------|
-| `access_password` | SHA-256 hash of the login password (file mode only). Leave empty to disable auth. | empty (disabled) |
+| `access_password` | SHA-256 hash of the login password (file mode only). **Empty means authentication is unconfigured, not disabled**: a startup check refuses to bind a non-loopback address with no credential while `enable_https=false` — see [Fail-closed startup](#fail-closed-startup). | empty (unconfigured) |
+| `security.dev_insecure_mode` | Local-demo exception to that check: permits a credential-less bind **only** on a loopback address. Authentication is genuinely off while it is set, so an audit entry is written at startup and `GET /health` echoes the flag. | `false` |
 | `access_token_ttl` | Session token lifetime in seconds. | `43200` (12h) |
 | `persistence_mode` | `postgresql` enables database-backed user management; `file` uses config-based auth. | `file` |
 
