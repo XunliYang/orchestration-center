@@ -60,8 +60,8 @@ class TestSolutionPackageManagerInit:
         mock_framework_dir = MagicMock(spec=Path)
         mock_project_root = MagicMock(spec=Path)
 
-        # Set up path relationship: current_file.parent.parent = project_root
-        mock_current_file.parent.parent = mock_project_root
+        # Set up path relationship: current_file.parents[2] = repository root
+        mock_current_file.parents.__getitem__.return_value = mock_project_root
         mock_path_class.return_value.resolve.return_value = mock_current_file
 
         # Set up the constructed storage_dir
