@@ -21,16 +21,14 @@ from typing import Optional, List
 
 from loguru import logger
 
-from common.custom import HandlerRegistry, InterfaceType
-from orchestrate.handlers.psop_processor import build_tasks_summary
 from common.llm import get_llm_instance
 from common.util.json_utils import parse_llm_json_response
-from common.util.persistence_mode import is_db_mode
 from orchestrate.core.model.preflow import PreFlow
 from orchestrate.core.model.psop import PSOP
 from orchestrate.core.persistence import WorkflowStorage
 from orchestrate.core.prompts import get_retrieve_psop_prompt
 from orchestrate.core.workflow_search_result import WorkflowSearchResult
+from orchestrate.persistence import current_context
 
 
 def _detect_intent_lang(text: str) -> Optional[str]:
@@ -49,35 +47,18 @@ def _detect_intent_lang(text: str) -> Optional[str]:
     return "English"
 
 class WorkflowRetrieval:
-    def __init__(self, storage: WorkflowStorage):
+    def __init__(self, storage: WorkflowStorage, context=None):
         self.storage = storage
-        self._db_mode = is_db_mode()
+        # Resolved once. In file mode this binds the storage the caller owns
+        # (tests inject a temporary one); in the database modes it is the
+        # configured backend's repository. See PersistenceBackend.psops_for.
+        self._psops = (context or current_context()).psops_for(storage)
 
     def _list_psop_summaries(self) -> List[WorkflowSearchResult]:
-        if self._db_mode:
-            return HandlerRegistry.get_handler(InterfaceType.GET_ALL_PSOP).handle()
-        results = []
-        for wf_id in self.storage.list_psops():
-            psop = self.storage.load_psop(wf_id)
-            if psop:
-                tasks_summary = build_tasks_summary(psop)
-                results.append(WorkflowSearchResult(
-                    workflow_id=psop.id,
-                    workflow_type="psop",
-                    name=psop.name,
-                    description=psop.description,
-                    tags=psop.tags,
-                    created_at=psop.created_at,
-                    user_intent=psop.user_intent,
-                    related_preflow=psop.related_preflow,
-                    tasks_summary=tasks_summary,
-                ))
-        return results
+        return self._psops.list_summaries()
 
     def _load_psop_by_id(self, workflow_id: str) -> Optional[PSOP]:
-        if self._db_mode:
-            return HandlerRegistry.get_handler(InterfaceType.GET_PSOP_BY_ID).handle(workflow_id)
-        return self.storage.load_psop(workflow_id)
+        return self._psops.get(workflow_id)
 
     def get_psop_by_id(self, workflow_id: str) -> Optional[PSOP]:
         result = self._load_psop_by_id(workflow_id)
