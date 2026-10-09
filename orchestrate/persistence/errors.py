@@ -28,8 +28,13 @@ class StorageError(Exception):
     """Base class for every storage failure."""
 
 
-class StorageUnavailableError(StorageError):
-    """The backend could not be reached: connect failure, pool exhaustion, timeouts."""
+class StorageUnavailableError(StorageError, RuntimeError):
+    """The backend could not be reached: connect failure, pool exhaustion, timeouts.
+
+    Also a ``RuntimeError`` for compatibility with existing authentication
+    guards. Operation boundaries must raise this instead of returning empty
+    results; exception inheritance alone does not classify database failures.
+    """
 
 
 class StorageConflictError(StorageError):

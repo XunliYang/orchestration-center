@@ -38,6 +38,8 @@ from starlette.responses import JSONResponse, Response
 
 from common.util.config_util import get_conf
 from orchestrate.persistence import current_context
+from orchestrate.persistence.errors import StorageError
+from orchestrate.server.storage_error_response import storage_http_exception
 from orchestrate.server.response_utils import ok, error
 
 # Endpoints that must remain public even when auth is enabled.
@@ -251,6 +253,8 @@ def require_admin(request: Request) -> None:
         # Fail closed with 503 when the user store is unreachable.
         logger.error(f"[Auth] Authentication backend unavailable: {e}")
         raise HTTPException(status_code=503, detail="Authentication backend unavailable")
+    except StorageError as e:
+        raise storage_http_exception(e) from e
     if not auth_enabled:
         return
     token = extract_token(request)
@@ -332,6 +336,9 @@ async def auth_middleware(request: Request, call_next):
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             content=error(503, "Authentication backend unavailable"),
         )
+    except StorageError as e:
+        mapped = storage_http_exception(e)
+        return JSONResponse(status_code=mapped.status_code, content=error(mapped.status_code, mapped.detail))
 
     if not auth_enabled:
         return await call_next(request)

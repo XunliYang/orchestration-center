@@ -60,6 +60,8 @@ from orchestrate.agentcard_loader import _normalize_agent_dict
 from common.log.audit_logger import audit_logger, OperationObject, OperationName, LogLevel, OperationResult
 from common.util.config_util import get_conf
 from orchestrate.persistence import current_context
+from orchestrate.persistence.errors import StorageError
+from orchestrate.server.storage_error_response import storage_http_exception
 from common.util.password_hash import FILE_HASH_PREFIX, hash_password, verify_legacy_bcrypt, verify_password
 from orchestrate.core.model.preflow import PreFlow
 from orchestrate.core.model.psop import PSOP
@@ -158,6 +160,12 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
         content=error(422, "; ".join(messages)),
     )
+
+
+@app.exception_handler(StorageError)
+async def storage_exception_handler(request: Request, exc: StorageError):
+    mapped = storage_http_exception(exc)
+    return JSONResponse(status_code=mapped.status_code, content=error(mapped.status_code, mapped.detail))
 
 # Query param keys that commonly carry credentials. access_token no longer
 # reaches the backend this way -- the session token now travels as an
@@ -483,6 +491,8 @@ async def list_workflows(
         raise HTTPException(status_code=503, detail="Server is busy")
     except HTTPException:
         raise
+    except StorageError as e:
+        raise storage_http_exception(e) from e
     except Exception as e:
         logger.error(f"Failed to list workflows: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -510,6 +520,8 @@ async def get_workflow(
         raise HTTPException(status_code=503, detail="Server is busy")
     except HTTPException:
         raise
+    except StorageError as e:
+        raise storage_http_exception(e) from e
     except Exception as e:
         logger.error(f"Failed to get workflow {workflow_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -555,6 +567,8 @@ async def create_workflow(
             'result': OperationResult.FAILURE,
             'details': {"message": str(e)},
         })
+        if isinstance(e, StorageError):
+            raise storage_http_exception(e) from e
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         if acquired:
@@ -591,6 +605,8 @@ async def delete_workflow(
         raise HTTPException(status_code=503, detail="Server is busy")
     except HTTPException:
         raise
+    except StorageError as e:
+        raise storage_http_exception(e) from e
     except Exception as e:
         logger.error(f"Failed to delete workflow {workflow_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -663,6 +679,8 @@ async def parse_pdf(
         raise HTTPException(status_code=503, detail="Server is busy")
     except HTTPException:
         raise
+    except StorageError as e:
+        raise storage_http_exception(e) from e
     except Exception as e:
         logger.error(f"PDF parsing failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -752,6 +770,8 @@ async def generate_from_preflow(
         # actions instead of a generic server error.
         logger.warning(f"PreFlow generation cannot match agents: {e}")
         raise HTTPException(status_code=422, detail=str(e))
+    except StorageError as e:
+        raise storage_http_exception(e) from e
     except Exception as e:
         logger.error(f"PreFlow generation failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -813,6 +833,8 @@ async def generate_from_intent(
         # registered agent skill.
         logger.warning(f"Intent generation cannot match agents: {e}")
         raise HTTPException(status_code=422, detail=str(e))
+    except StorageError as e:
+        raise storage_http_exception(e) from e
     except Exception as e:
         logger.error(f"Intent generation failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -844,6 +866,8 @@ async def retrieve_by_intent(
         raise HTTPException(status_code=503, detail="Server is busy")
     except HTTPException:
         raise
+    except StorageError as e:
+        raise storage_http_exception(e) from e
     except Exception as e:
         logger.error(f"Retrieval failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -876,6 +900,8 @@ async def retrieve_topn_by_intent(
         raise HTTPException(status_code=503, detail="Server is busy")
     except HTTPException:
         raise
+    except StorageError as e:
+        raise storage_http_exception(e) from e
     except Exception as e:
         logger.error(f"TopN retrieval failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -910,6 +936,8 @@ async def list_agent_cards(
         raise HTTPException(status_code=400, detail=str(e))
     except HTTPException:
         raise
+    except StorageError as e:
+        raise storage_http_exception(e) from e
     except Exception as e:
         logger.error(f"Failed to fetch agent cards: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -989,6 +1017,8 @@ async def update_agent_card(
         })
         mapped = {404: 404, 400: 400, 401: 400, 403: 403, 422: 400}.get(e.response.status_code, 502)
         raise HTTPException(status_code=mapped, detail=detail)
+    except StorageError as e:
+        raise storage_http_exception(e) from e
     except Exception as e:
         logger.error(f"Failed to update agent card {name}: {e}")
         audit_logger.audit({
@@ -1045,6 +1075,8 @@ async def delete_agent_card(
         })
         mapped = {404: 404, 400: 400, 401: 400, 403: 403, 422: 400}.get(e.response.status_code, 502)
         raise HTTPException(status_code=mapped, detail=detail)
+    except StorageError as e:
+        raise storage_http_exception(e) from e
     except Exception as e:
         logger.error(f"Failed to delete agent card {name}: {e}")
         audit_logger.audit({
@@ -1088,6 +1120,8 @@ async def list_templates(
         return ok(data=templates)
     except HTTPException:
         raise
+    except StorageError as e:
+        raise storage_http_exception(e) from e
     except Exception as e:
         logger.error(f"Failed to list templates: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -1118,6 +1152,8 @@ async def import_template(
         raise HTTPException(status_code=503, detail="Server is busy")
     except HTTPException:
         raise
+    except StorageError as e:
+        raise storage_http_exception(e) from e
     except Exception as e:
         logger.error(f"Failed to import template {template_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -1160,6 +1196,8 @@ async def execute_workflow(
         raise HTTPException(status_code=503, detail="Server is busy")
     except HTTPException:
         raise
+    except StorageError as e:
+        raise storage_http_exception(e) from e
     except Exception as e:
         logger.error(f"Failed to execute workflow: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -1200,6 +1238,8 @@ async def dispatch_to_agent(
         raise HTTPException(status_code=503, detail="Server is busy")
     except HTTPException:
         raise
+    except StorageError as e:
+        raise storage_http_exception(e) from e
     except Exception as e:
         logger.error(f"Dispatch failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -1217,6 +1257,8 @@ async def delete_execution_record(execution_id: str):
     except WorkflowStorageError as e:
         # 非法 ID(路径穿越形态)按客户端错误处理,而非 500
         raise HTTPException(status_code=400, detail=str(e))
+    except StorageError as e:
+        raise storage_http_exception(e) from e
     except Exception as e:
         logger.error(f"Failed to delete execution record: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -1229,6 +1271,8 @@ async def list_execution_records():
         return ok(data=records)
     except HTTPException:
         raise
+    except StorageError as e:
+        raise storage_http_exception(e) from e
     except Exception as e:
         logger.error(f"Failed to list execution records: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -1246,6 +1290,8 @@ async def get_execution_record(execution_id: str):
     except WorkflowStorageError as e:
         # 非法 ID(路径穿越形态)按客户端错误处理,而非 500
         raise HTTPException(status_code=400, detail=str(e))
+    except StorageError as e:
+        raise storage_http_exception(e) from e
     except Exception as e:
         logger.error(f"Failed to get execution record: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -1306,6 +1352,8 @@ async def legacy_save_workflow(request: SavePSOPRequest, _: Any = Depends(RateLi
         raise HTTPException(status_code=503, detail="Server is busy")
     except HTTPException:
         raise
+    except StorageError as e:
+        raise storage_http_exception(e) from e
     except Exception as e:
         logger.error(f"Failed to save workflow (legacy): {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -1328,6 +1376,8 @@ async def legacy_delete_workflow(workflow_id: str, _: Any = Depends(RateLimiter(
         raise HTTPException(status_code=503, detail="Server is busy")
     except HTTPException:
         raise
+    except StorageError as e:
+        raise storage_http_exception(e) from e
     except Exception as e:
         logger.error(f"Failed to delete workflow (legacy): {e}")
         raise HTTPException(status_code=500, detail=str(e))

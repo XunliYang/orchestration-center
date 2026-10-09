@@ -158,9 +158,10 @@ def test_register_works_when_enabled(client, monkeypatch):
 
 def test_has_any_user_raises_when_db_unreachable(monkeypatch):
     import database.utils.user_store as user_store
+    from orchestrate.persistence.errors import StorageUnavailableError
     monkeypatch.setattr(user_store, "_any_user_exists_cache", False)
     monkeypatch.setattr(user_store, "create_connection", lambda: None)
-    with pytest.raises(RuntimeError, match="User store unavailable"):
+    with pytest.raises(StorageUnavailableError):
         user_store.has_any_user()
 
 

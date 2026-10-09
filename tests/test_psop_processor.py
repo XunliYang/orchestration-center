@@ -17,6 +17,7 @@ import json
 from unittest.mock import MagicMock, patch
 
 import pytest
+from orchestrate.persistence.errors import StorageError, StorageUnavailableError
 
 from orchestrate.handlers.psop_processor import (
     build_tasks_summary,
@@ -148,7 +149,7 @@ class TestCustomSavePsop:
         psop.description = "desc"
         psop.model_dump_json.return_value = "{}"
         with patch("orchestrate.handlers.psop_processor.create_connection", return_value=mock_conn):
-            with pytest.raises(RuntimeError, match="Failed to save PSOP"):
+            with pytest.raises(StorageError, match="Failed to save PSOP"):
                 custom_save_psop(psop)
 
 
@@ -178,17 +179,18 @@ class TestCustomDeletePsop:
 
     def test_conn_none(self):
         with patch("orchestrate.handlers.psop_processor.create_connection", return_value=None):
-            result = custom_delete_psop("psop-1")
-            assert result is False
+            with pytest.raises(StorageUnavailableError):
+                custom_delete_psop("psop-1")
 
     def test_exception(self):
         mock_conn = MagicMock()
         mock_cur = MagicMock()
-        mock_cur.execute.side_effect = Exception("conn lost")
+        mock_cur.execute.side_effect = ConnectionError("conn lost")
         mock_conn.cursor.return_value = mock_cur
         with patch("orchestrate.handlers.psop_processor.create_connection", return_value=mock_conn):
-            result = custom_delete_psop("psop-1")
-            assert result is False
+            with pytest.raises(StorageUnavailableError):
+                custom_delete_psop("psop-1")
+            mock_conn.rollback.assert_called_once()
 
 
 # ---------------------------------------------------------------------------
@@ -213,13 +215,12 @@ class TestGetAllPsops:
         mock_cur.fetchall.return_value = []
         mock_conn.cursor.return_value = mock_cur
         with patch("orchestrate.handlers.psop_processor.create_connection", return_value=mock_conn):
-            result = get_all_psops()
-            assert result == []
+            assert get_all_psops() == []
 
     def test_conn_none(self):
         with patch("orchestrate.handlers.psop_processor.create_connection", return_value=None):
-            result = get_all_psops()
-            assert result == []
+            with pytest.raises(StorageUnavailableError):
+                get_all_psops()
 
 
 # ---------------------------------------------------------------------------
@@ -249,5 +250,5 @@ class TestGetPsopById:
 
     def test_conn_none(self):
         with patch("orchestrate.handlers.psop_processor.create_connection", return_value=None):
-            result = get_psop_by_id("p1")
-            assert result is None
+            with pytest.raises(StorageUnavailableError):
+                get_psop_by_id("p1")

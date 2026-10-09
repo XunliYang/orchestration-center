@@ -116,6 +116,11 @@ class TestRegisterComplexity:
 
 @pytest.mark.anyio
 class TestChangePasswordDbMode:
+    @pytest.fixture(autouse=True)
+    def _matching_database_mode(self, monkeypatch):
+        from common.util import persistence_mode
+        monkeypatch.setattr(persistence_mode, "get_conf", lambda: {"persistence_mode": "postgresql"})
+
     async def test_rejects_weak_new_password(self, monkeypatch):
         monkeypatch.setattr(srv, "get_conf", lambda: {"persistence_mode": "postgresql"})
         monkeypatch.setattr(srv, "current_context", _database_context)
