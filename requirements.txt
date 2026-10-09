@@ -29,6 +29,8 @@ pymupdf
 limits>=5.8.0
 python-multipart>=0.0.24
 psycopg2-binary>=2.9.10
+PyMySQL>=1.1.0,<2
+DBUtils>=3.0,<4
 cryptography>=41.0.0
 bcrypt>=4.0
 # Development dependencies (install separately for testing):

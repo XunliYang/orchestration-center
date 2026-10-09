@@ -41,6 +41,7 @@ etc/ssl/
 etc/conf/agent_credentials.json
 etc/conf/server.conf
 etc/conf/db_config.json
+etc/conf/mysql_config.json
 *.token.md
 *token*.md
 workflow-designer/dist-plugin/

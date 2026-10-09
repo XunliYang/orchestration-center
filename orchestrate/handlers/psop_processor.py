@@ -23,19 +23,13 @@ from loguru import logger
 
 from database.utils.db_connection import create_connection
 from database.utils.query_execution import execute_query
+from database.utils.sql_dialect import upsert_sql
 from orchestrate.core.model.psop import PSOP
 from orchestrate.core.workflow_search_result import WorkflowSearchResult
 
 
 def custom_save_psop(psop):
-    save_sql = """
-               INSERT INTO psop (id, name, description, psop_content)
-               VALUES (%s, %s, %s, %s)
-               ON CONFLICT (id) DO UPDATE SET
-                   name = EXCLUDED.name,
-                   description = EXCLUDED.description,
-                   psop_content = EXCLUDED.psop_content
-               """
+    save_sql = upsert_sql("psop", "id", ("id", "name", "description", "psop_content"))
     conn = create_connection()
     if conn is None:
         raise RuntimeError("Unable to connect to database")

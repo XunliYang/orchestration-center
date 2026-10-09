@@ -18,9 +18,14 @@
 from database.utils.db_connection import create_connection
 from database.utils.query_execution import execute_query
 from loguru import logger
+from common.util.persistence_mode import persistence_mode
 
 
 def create_tables():
+    if persistence_mode() == "mysql":
+        from database.utils.mysql_connection import get_backend
+        get_backend().create_tables()
+        return
     create_psop_sql = """
                        CREATE TABLE IF NOT EXISTS psop
                        (

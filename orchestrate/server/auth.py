@@ -18,8 +18,8 @@
 """Access authentication for internal API.
 
 Internal API (``/rest/v1/orchestrate/*``):
-    Database-backed user authentication.  Users are stored in PostgreSQL
-    ``users`` table with SHA-256 + salt password hashing.  Session tokens
+    Database-backed user authentication. Users are stored in the PostgreSQL
+    or MySQL ``users`` table with versioned bcrypt password hashes. Session tokens
     are in-memory with configurable TTL.
 
 External API (``/api/v1/*``):
@@ -99,7 +99,7 @@ def clear_session_cookie(response: Response) -> None:
 def is_auth_enabled() -> bool:
     """Return True when authentication is enabled.
 
-    In PostgreSQL mode: checks if the users table has any user.  Raises
+    In database mode (PostgreSQL/MySQL): checks if the users table has any user. Raises
     RuntimeError when the user store is unreachable -- callers must fail
     closed (503) instead of treating "cannot determine" as "auth disabled".
     In file mode: checks ``access_password`` in server.conf.
